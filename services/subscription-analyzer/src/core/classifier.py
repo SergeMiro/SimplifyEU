@@ -4,10 +4,10 @@ from ..config import settings
 
 async def classify_merchant(descriptor: str, amount: float, frequency: str) -> dict:
     """
-    Calls Mistral API to classify if transaction is a subscription.
+    Calls LLM API (Mistral or Chutes.ai) to classify if transaction is a subscription.
     """
-    # Quick mock return if no key or for testing
-    if not settings.MISTRAL_API_KEY or settings.MISTRAL_API_KEY == "your_mistral_api_key":
+    # Quick mock return if no keys for testing
+    if not settings.MISTRAL_API_KEY and not settings.CHUTES_API_KEY:
         # Fallback simple logic
         is_sub = "subscription" in descriptor.lower() or frequency in ["monthly", "annual"]
         return {
@@ -38,23 +38,30 @@ Respond in JSON:
 }}
 """
 
+    if settings.LLM_PROVIDER == "chutes":
+        url = "https://api.chutes.ai/v1/chat/completions"
+        api_key = settings.CHUTES_API_KEY
+        model = settings.CHUTES_MODEL
+    else:
+        url = "https://api.mistral.ai/v1/chat/completions"
+        api_key = settings.MISTRAL_API_KEY
+        model = "mistral-small-latest"
+
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.post(
-                "https://api.mistral.ai/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {settings.MISTRAL_API_KEY}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": "mistral-small-latest",
-                    "messages": [
-                        {"role": "user", "content": prompt}
-                    ],
-                    "response_format": {"type": "json_object"}
-                },
-                timeout=10.0
-            )
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": model,
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ],
+                "response_format": {"type": "json_object"}
+            }
+            
+            response = await client.post(url, headers=headers, json=payload, timeout=20.0)
             response.raise_for_status()
             data = response.json()
             content = data['choices'][0]['message']['content']
