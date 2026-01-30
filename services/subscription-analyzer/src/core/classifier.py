@@ -39,7 +39,7 @@ Respond in JSON:
 """
 
     if settings.LLM_PROVIDER == "chutes":
-        url = "https://api.chutes.ai/v1/chat/completions"
+        url = f"{settings.CHUTES_BASE_URL.rstrip('/')}/chat/completions"
         api_key = settings.CHUTES_API_KEY
         model = settings.CHUTES_MODEL
     else:
