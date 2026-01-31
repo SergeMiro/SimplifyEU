@@ -44,7 +44,7 @@ export default function SubscriptionDetectorPage() {
     return {
       "X-API-Key": API_KEY,
       "X-Account-ID": accountId,
-      "X-User-ID": session?.user?.id || "",
+      "X-User-ID": session?.user?.id || "anonymous",
     }
   }
 

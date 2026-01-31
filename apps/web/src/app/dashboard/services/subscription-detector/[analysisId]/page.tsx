@@ -48,7 +48,7 @@ export default function AnalysisResultPage() {
                 const headers = {
                     "X-API-Key": API_KEY,
                     "X-Account-ID": accountId,
-                    "X-User-ID": session?.user?.id || "",
+                    "X-User-ID": session?.user?.id || "anonymous",
                 }
 
                 const res = await fetch(`${API_URL}/analyses/${analysisId}`, { headers })
@@ -94,7 +94,7 @@ export default function AnalysisResultPage() {
                 headers: {
                     "X-API-Key": API_KEY,
                     "X-Account-ID": accountId,
-                    "X-User-ID": session?.user?.id || "",
+                    "X-User-ID": session?.user?.id || "anonymous",
                 }
              })
 
@@ -135,7 +135,7 @@ export default function AnalysisResultPage() {
                 headers: {
                     "X-API-Key": API_KEY,
                     "X-Account-ID": accountId,
-                    "X-User-ID": session?.user?.id || "",
+                    "X-User-ID": session?.user?.id || "anonymous",
                     "Content-Type": "application/json"
                 },
                 body: JSON.stringify({

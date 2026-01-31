@@ -79,7 +79,7 @@ async def run_analysis_task(analysis_id: str, account_id: str, file_content: byt
 async def create_analysis(
     file: UploadFile = File(...),
     account_id: str = Depends(get_current_account),
-    user_id: str = Header(..., alias="X-User-ID")
+    user_id: str = Header("anonymous", alias="X-User-ID")
 ):
     # Determine file type
     filename = file.filename.lower()
