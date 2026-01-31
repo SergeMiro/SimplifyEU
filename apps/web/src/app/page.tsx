@@ -6,6 +6,7 @@ import {
   CreditCard,
   FileText,
   Shield,
+  Sparkles,
   Users,
   Zap,
 } from "lucide-react";
@@ -28,6 +29,12 @@ export default function Home() {
             </Link>
             <Link href="#pricing" className="text-muted-foreground hover:text-foreground">
               Pricing
+            </Link>
+            <Link href="/ai-test">
+              <Button variant="outline" className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 border-purple-500/30 hover:border-purple-500">
+                <Sparkles className="mr-2 h-4 w-4 text-purple-500" />
+                AI Test
+              </Button>
             </Link>
             <Link href="/auth/login">
               <Button variant="ghost">Sign In</Button>
@@ -265,7 +272,7 @@ function PricingCard({
       <h3 className="text-xl font-semibold mb-2">{title}</h3>
       <div className="text-4xl font-bold mb-2">
         {price}
-        <span className="text-lg font-normal text-muted-foreground">/month</span>
+        <span className="text-md font-normal text-muted-foreground">/month</span>
       </div>
       <p className="text-muted-foreground mb-6">{description}</p>
       <ul className="space-y-3 mb-6">

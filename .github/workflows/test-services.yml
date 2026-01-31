@@ -1,0 +1,58 @@
+name: Test Microservices
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test-python-service:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+        
+    - name: Install dependencies
+      run: |
+        cd services/subscription-analyzer
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-asyncio httpx
+        
+    - name: Run Pytest
+      run: |
+        cd services/subscription-analyzer
+        pytest
+      env:
+        # Mocking required env vars for tests that might need them
+        SUPABASE_URL: "https://example.supabase.co"
+        SUPABASE_KEY: "mock-key"
+        CHUTES_API_KEY: "mock-key"
+        LLM_PROVIDER: "chutes"
+
+  test-frontend:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+        
+    - name: Install pnpm
+      uses: pnpm/action-setup@v3
+      with:
+        version: 9
+        
+    - name: Install dependencies
+      run: pnpm install
+      
+    - name: Run Lint
+      run: pnpm run lint

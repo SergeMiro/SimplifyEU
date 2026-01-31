@@ -11,3 +11,4 @@ python-dotenv>=1.0.0
 pytest>=7.0.0
 pytest-asyncio>=0.21.0
 passlib[bcrypt]>=1.7.4
+openpyxl>=3.1.0

@@ -48,7 +48,7 @@ export function FileUpload({ onUpload, isLoading }: FileUploadProps) {
     >
       <CardContent className="flex flex-col items-center justify-center py-10 space-y-4">
         <div className="text-center">
-            <h3 className="text-lg font-semibold">Upload Bank Statement</h3>
+            <h3 className="text-md font-semibold">Upload Bank Statement</h3>
             <p className="text-sm text-gray-500">Drag & drop CSV file or click to browse</p>
         </div>
 
