@@ -5,3 +5,7 @@
 2026-01-31 12:30 | scope=services/subscription-analyzer | change=created | files=test_data/generate_test_data.py,test_data/*.csv,test_data/*.xlsx,core/csv_parser.py | purpose=synthetic test data generator + Excel support | tests=pytest | notes=240 transactions generated
 2026-01-31 12:49 | scope=repo | change=created | files=TESTING_GUIDE.md | purpose=central microservices testing guide | tests=N/A
 2026-01-31 12:52 | scope=repo | change=modified | files=TESTING_GUIDE.md,.github/workflows/test-services.yml | purpose=added manual API tests and GitHub Actions CI | tests=pytest
+2026-01-31 13:15 | scope=services/subscription-analyzer | change=modified | files=tests/*,test_data/* | purpose=restructured tests: moved test_data inside tests folder for better logic
+2026-01-31 13:21 | scope=services/subscription-analyzer | change=modified | files=tests/test_data/.gitkeep | purpose=ensure test_data folder structure is preserved | tests=pytest
+2026-01-31 13:40 | scope=repo | change=modified | files=apps/web/src/app/dashboard/services/subscription-detector/page.tsx, services/subscription-analyzer/src/api/v1/analyses.py | purpose=added dark mode, upgrade btn, clean delete logic | tests=manual verify in browser
+2026-01-31 13:35 | scope=services/subscription-analyzer | change=created,modified | files=src/core/email_service.py,src/config.py,src/api/v1/analyses.py,.env.example,tests/test_email_service.py | purpose=implemented email report sending via SMTP with HTML templates | tests=pytest (20 passed)

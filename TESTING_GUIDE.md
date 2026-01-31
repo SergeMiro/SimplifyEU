@@ -10,24 +10,24 @@ This service analyzes bank statements (CSV/Excel) to find hidden subscriptions u
 
 ### 📁 Test Data Location
 All synthetic test files are located in:
-`services/subscription-analyzer/test_data/`
+`services/subscription-analyzer/tests/test_data/`
 
 ### 🛠 How to Test
 
 #### 1. Quick Demo (For Clients)
 Use the lightweight CSV with 26 transactions to show immediate results.
-- **File:** `services/subscription-analyzer/test_data/simple_test.csv`
+- **File:** `services/subscription-analyzer/tests/test_data/simple_test.csv`
 - **Action:** Upload via the Dashboard UI at `/dashboard/services/subscription-detector`.
 
 #### 2. Stress Test / Full Analysis
 Use the full dataset with 240+ transactions covering a 3-month period.
-- **File:** `services/subscription-analyzer/test_data/test_statement.csv` (or `.xlsx`)
+- **File:** `services/subscription-analyzer/tests/test_data/test_statement.csv` (or `.xlsx`)
 - **Action:** Upload via the Dashboard UI.
 
 #### 3. Generate New Data
 If you need more data or different patterns, run the generator script:
 ```bash
-cd services/subscription-analyzer/test_data
+cd services/subscription-analyzer/tests/test_data
 python generate_test_data.py
 ```
 
@@ -47,7 +47,7 @@ curl -X POST http://localhost:8001/v1/analyses \
   -H "X-API-Key: sk_test_123" \
   -H "X-Account-ID: [ACCOUNT_ID]" \
   -H "X-User-ID: [USER_ID]" \
-  -F "file=@services/subscription-analyzer/test_data/simple_test.csv"
+  -F "file=@services/subscription-analyzer/tests/test_data/simple_test.csv"
 ```
 
 #### 3. Run Analysis Task

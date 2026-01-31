@@ -10,6 +10,16 @@ class Settings(BaseSettings):
     CHUTES_MODEL: str = "chutesai/Mistral-Small-3.1-24B-Instruct-2503"
     REDIS_URL: str | None = None
     API_KEY_SALT: str = "default_salt"
+    
+    # SMTP Configuration for Email Reports
+    SMTP_HOST: str = "smtp.example.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: str = "your_smtp_user@example.com"
+    SMTP_PASSWORD: str = "your_smtp_password"
+    SMTP_SENDER_EMAIL: str = "noreply@simplifyeu.com"
+    SMTP_SENDER_NAME: str = "SimplifyEU Reports"
+    SMTP_USE_TLS: bool = True
+    SMTP_USE_SSL: bool = False
 
     class Config:
         env_file = ".env"
