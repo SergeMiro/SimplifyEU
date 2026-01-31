@@ -1,6 +1,6 @@
 """
 PDF Parser with OCR support for bank statements.
-Uses pytesseract for OCR and pdf2image for PDF conversion.
+Uses PaddleOCR for OCR and pdf2image for PDF conversion.
 """
 import io
 import re
@@ -11,14 +11,13 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# Check for optional dependencies
+# Check for OCR module (PaddleOCR-based)
 try:
-    import pytesseract
-    from PIL import Image
-    TESSERACT_AVAILABLE = True
+    from .ocr import get_ocr_engine, is_ocr_available, get_ocr_capabilities
+    OCR_AVAILABLE = is_ocr_available()
 except ImportError:
-    TESSERACT_AVAILABLE = False
-    logger.warning("pytesseract or PIL not installed. PDF OCR will be unavailable.")
+    OCR_AVAILABLE = False
+    logger.warning("OCR module not available. PDF OCR will be unavailable.")
 
 try:
     from pdf2image import convert_from_bytes
@@ -64,15 +63,15 @@ class PDFParser:
         r'[-−]?\s*EUR\s*(\d+[.,]\d{2})',                    # EUR 123.45
     ]
     
-    def __init__(self, ocr_lang: str = "eng+fra+deu+rus"):
+    def __init__(self, ocr_lang: str = "en"):
         """
         Initialize PDF parser.
         
         Args:
-            ocr_lang: Tesseract language codes for OCR (default supports EN, FR, DE, RU)
+            ocr_lang: PaddleOCR language code (en, fr, german, ru, etc.)
         """
         self.ocr_lang = ocr_lang
-        self.ocr_available = TESSERACT_AVAILABLE and PDF2IMAGE_AVAILABLE
+        self.ocr_available = OCR_AVAILABLE and PDF2IMAGE_AVAILABLE
         self.text_extraction_available = PDFPLUMBER_AVAILABLE
         
     def parse(self, pdf_content: bytes) -> list[Transaction]:
@@ -95,7 +94,7 @@ class PDFParser:
             else:
                 raise PDFParseError(
                     "PDF appears to be scanned but OCR dependencies are not installed. "
-                    "Please install: pip install pytesseract pdf2image pillow"
+                    "Please install: pip install paddleocr paddlepaddle pdf2image pillow"
                 )
         
         if not text:
@@ -136,33 +135,16 @@ class PDFParser:
             logger.warning(f"pdfplumber extraction failed: {e}")
             return ""
     
-    def _extract_text_ocr(self, pdf_content: bytes, dpi: int = 300) -> str:
-        """Extract text from scanned PDF using OCR."""
+    def _extract_text_ocr(self, pdf_content: bytes, dpi: int = 200) -> str:
+        """Extract text from scanned PDF using PaddleOCR."""
         if not self.ocr_available:
             raise PDFParseError("OCR dependencies not available")
         
         try:
-            # Convert PDF pages to images
-            images = convert_from_bytes(pdf_content, dpi=dpi)
-            
-            text_parts = []
-            for i, image in enumerate(images):
-                logger.info(f"Processing page {i + 1} with OCR...")
-                
-                # Preprocess image for better OCR
-                image = self._preprocess_image(image)
-                
-                # Run OCR
-                page_text = pytesseract.image_to_string(
-                    image, 
-                    lang=self.ocr_lang,
-                    config='--psm 6'  # Assume uniform block of text
-                )
-                
-                if page_text:
-                    text_parts.append(page_text)
-            
-            return "\n".join(text_parts)
+            # Use PaddleOCR engine from ocr.py module
+            ocr_engine = get_ocr_engine(lang=self.ocr_lang)
+            text = ocr_engine.extract_text_from_pdf(pdf_content, dpi=dpi)
+            return text
             
         except Exception as e:
             logger.error(f"OCR extraction failed: {e}")
@@ -283,26 +265,28 @@ class PDFParser:
     
     def get_capabilities(self) -> dict:
         """Return information about available parsing capabilities."""
+        ocr_caps = get_ocr_capabilities() if OCR_AVAILABLE else {}
         return {
             "text_extraction": self.text_extraction_available,
             "ocr_available": self.ocr_available,
+            "ocr_engine": ocr_caps.get("engine"),
             "ocr_languages": self.ocr_lang if self.ocr_available else None,
             "dependencies": {
                 "pdfplumber": PDFPLUMBER_AVAILABLE,
-                "pytesseract": TESSERACT_AVAILABLE,
+                "paddleocr": OCR_AVAILABLE,
                 "pdf2image": PDF2IMAGE_AVAILABLE,
             }
         }
 
 
 # Convenience function
-def parse_pdf(pdf_content: bytes, ocr_lang: str = "eng+fra+deu+rus") -> list[Transaction]:
+def parse_pdf(pdf_content: bytes, ocr_lang: str = "en") -> list[Transaction]:
     """
     Parse PDF bank statement.
     
     Args:
         pdf_content: Raw PDF bytes
-        ocr_lang: OCR language codes
+        ocr_lang: PaddleOCR language code (en, fr, german, ru, etc.)
         
     Returns:
         List of Transaction objects

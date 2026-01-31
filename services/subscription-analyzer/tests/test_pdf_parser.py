@@ -16,12 +16,12 @@ class TestPDFParser:
     def test_init_default_language(self):
         """Test parser initializes with default OCR language."""
         parser = PDFParser()
-        assert parser.ocr_lang == "eng+fra+deu+rus"
+        assert parser.ocr_lang == "en"
     
     def test_init_custom_language(self):
         """Test parser initializes with custom OCR language."""
-        parser = PDFParser(ocr_lang="eng+spa")
-        assert parser.ocr_lang == "eng+spa"
+        parser = PDFParser(ocr_lang="fr")
+        assert parser.ocr_lang == "fr"
     
     def test_get_capabilities(self):
         """Test capabilities method returns correct structure."""
@@ -33,7 +33,7 @@ class TestPDFParser:
         assert "ocr_languages" in caps
         assert "dependencies" in caps
         assert "pdfplumber" in caps["dependencies"]
-        assert "pytesseract" in caps["dependencies"]
+        assert "paddleocr" in caps["dependencies"]
         assert "pdf2image" in caps["dependencies"]
     
     def test_parse_date_formats(self):
@@ -226,31 +226,21 @@ class TestPDFParserOCR:
     """Test cases for OCR functionality (when available)."""
     
     def test_ocr_extraction(self):
-        """Test OCR text extraction."""
-        # Skip if dependencies not available
-        pytest.importorskip("pytesseract")
-        pytest.importorskip("pdf2image")
+        """Test OCR text extraction using PaddleOCR."""
+        # Mock the OCR engine
+        mock_engine = MagicMock()
+        mock_engine.extract_text_from_pdf.return_value = "--- Page 1 ---\n15/06/2024 OCR Transaction -50.00"
         
-        from pdf2image import convert_from_bytes
-        import pytesseract
-        
-        # Mock image
-        mock_image = MagicMock()
-        
-        with patch('src.core.pdf_parser.convert_from_bytes', return_value=[mock_image]):
-            with patch('src.core.pdf_parser.pytesseract') as mock_tesseract:
-                mock_tesseract.image_to_string.return_value = "15/06/2024 OCR Transaction -50.00"
-                
-                parser = PDFParser()
-                parser.ocr_available = True
-                
-                # Mock preprocessing
-                with patch.object(parser, '_preprocess_image', return_value=mock_image):
-                    text = parser._extract_text_ocr(b"fake pdf")
-                
-                assert "OCR Transaction" in text
+        with patch('src.core.pdf_parser.get_ocr_engine', return_value=mock_engine):
+            parser = PDFParser()
+            parser.ocr_available = True
+            
+            text = parser._extract_text_ocr(b"fake pdf")
+            
+            assert "OCR Transaction" in text
+            mock_engine.extract_text_from_pdf.assert_called_once()
     
-    @patch('src.core.pdf_parser.TESSERACT_AVAILABLE', False)
+    @patch('src.core.pdf_parser.OCR_AVAILABLE', False)
     @patch('src.core.pdf_parser.PDF2IMAGE_AVAILABLE', False)
     def test_ocr_unavailable(self):
         """Test behavior when OCR is not available."""
