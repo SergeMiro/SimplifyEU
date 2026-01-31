@@ -14,6 +14,18 @@ async def get_current_account(
     Validates API Key and returns account_id.
     Verifies the hash of the api_key against the stored hash in the database.
     """
+    print(f"[AUTH] Incoming request - API Key: {api_key[:10]}... Account ID: {account_id}")
+    
+    # Development/Demo Override - CHECK THIS FIRST to avoid DB calls
+    if api_key and (api_key.startswith("sk_test_") or api_key == "demo-key"):
+        print(f"[AUTH] Using demo/test key, bypassing database validation")
+        if not account_id:
+            raise HTTPException(
+                 status_code=status.HTTP_400_BAD_REQUEST,
+                 detail="Missing X-Account-ID header"
+            )
+        return account_id
+    
     if not api_key:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -26,10 +38,7 @@ async def get_current_account(
              detail="Missing X-Account-ID header"
         )
 
-    # Development/Demo Override
-    if api_key.startswith("sk_test_") or api_key == "demo-key":
-         return account_id
-
+    print(f"[AUTH] Checking production API key against database...")
     try:
         # Fetch API keys for the account
         # We assume table 'api_keys' exists with 'account_id' and 'key_hash' (or 'key' storing the hash)
@@ -37,6 +46,7 @@ async def get_current_account(
         keys = res.data
 
         if not keys:
+            print(f"[AUTH] No API keys found for account {account_id}")
             raise HTTPException(status_code=403, detail="Invalid API Key")
 
         is_valid = False
@@ -47,18 +57,21 @@ async def get_current_account(
                 try:
                     if pwd_context.verify(api_key, stored_hash):
                         is_valid = True
+                        print(f"[AUTH] API key verified successfully")
                         break
-                except Exception:
+                except Exception as verify_err:
+                    print(f"[AUTH] Verify error: {verify_err}")
                     continue
 
         if not is_valid:
+            print(f"[AUTH] API key validation failed")
             raise HTTPException(status_code=403, detail="Invalid API Key")
 
     except HTTPException:
         raise
     except Exception as e:
         # Log error
-        print(f"Auth error: {e}")
+        print(f"[AUTH] Database error: {e}")
         # Don't expose internal error
         raise HTTPException(status_code=403, detail="Invalid credentials")
 
