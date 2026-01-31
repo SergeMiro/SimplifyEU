@@ -11,6 +11,7 @@ from ...auth.api_key import get_current_account
 from ...db.client import supabase
 from ...db.models import Analysis, AnalysisItem
 from ...core.csv_parser import parse_csv
+from ...core.pdf_parser import parse_pdf, is_pdf_supported, PDFParseError
 from ...core.detector import detect_subscriptions
 from ...core.pdf_generator import generate_pdf_report
 from ...core.email_service import email_service
@@ -24,13 +25,19 @@ class SendReportRequest(BaseModel):
 
 router = APIRouter()
 
-async def run_analysis_task(analysis_id: str, account_id: str, file_content: bytes):
+async def run_analysis_task(analysis_id: str, account_id: str, file_content: bytes, source_type: str = "csv"):
     try:
         # Update status
         supabase.table("analyses").update({"status": "processing"}).eq("id", analysis_id).execute()
 
-        # Parse
-        transactions = parse_csv(file_content)
+        # Parse based on source type
+        if source_type == "pdf":
+            try:
+                transactions = parse_pdf(file_content)
+            except PDFParseError as e:
+                raise Exception(f"PDF parsing failed: {str(e)}")
+        else:
+            transactions = parse_csv(file_content)
 
         # Detect
         items = await detect_subscriptions(transactions, UUID(analysis_id))
@@ -74,12 +81,25 @@ async def create_analysis(
     account_id: str = Depends(get_current_account),
     user_id: str = Header(..., alias="X-User-ID")
 ):
-    if not file.filename.endswith(('.csv', '.txt')):
-        raise HTTPException(400, "Only CSV files are allowed")
+    # Determine file type
+    filename = file.filename.lower()
+    if filename.endswith('.pdf'):
+        source_type = "pdf"
+        # Check PDF support
+        pdf_caps = is_pdf_supported()
+        if not pdf_caps.get("text_extraction") and not pdf_caps.get("ocr_available"):
+            raise HTTPException(
+                400, 
+                "PDF support requires additional dependencies. Please use CSV format or contact support."
+            )
+    elif filename.endswith(('.csv', '.txt')):
+        source_type = "csv"
+    else:
+        raise HTTPException(400, "Supported formats: CSV, TXT, PDF")
 
     content = await file.read()
     if len(content) > 10 * 1024 * 1024:
-        raise HTTPException(400, "File too large")
+        raise HTTPException(400, "File too large (max 10MB)")
 
     # Upload to Supabase Storage (Private)
     file_path = f"{account_id}/{uuid.uuid4()}_{file.filename}"
@@ -99,7 +119,7 @@ async def create_analysis(
         "status": "pending",
         "filename": file.filename,
         "file_url": file_path, # Storing path
-        "source_type": "csv"
+        "source_type": source_type
     }
 
     res = supabase.table("analyses").insert(new_analysis).execute()
@@ -108,7 +128,7 @@ async def create_analysis(
 
     analysis_id = res.data[0]['id']
 
-    return {"analysis_id": analysis_id, "status": "pending"}
+    return {"analysis_id": analysis_id, "status": "pending", "source_type": source_type}
 
 @router.post("/analyses/{analysis_id}/run")
 async def run_analysis(
@@ -148,9 +168,10 @@ async def run_analysis(
         print(f"Download error: {e}")
         raise HTTPException(400, "Could not retrieve file content")
 
-    background_tasks.add_task(run_analysis_task, analysis_id, account_id, content)
+    source_type = analysis.get('source_type', 'csv')
+    background_tasks.add_task(run_analysis_task, analysis_id, account_id, content, source_type)
 
-    return {"status": "processing", "message": "Analysis started"}
+    return {"status": "processing", "message": "Analysis started", "source_type": source_type}
 
 @router.get("/analyses/{analysis_id}")
 async def get_analysis(
@@ -325,3 +346,27 @@ async def delete_analysis(
     supabase.table("analyses").delete().eq("id", analysis_id).execute()
 
     return {"message": "Analysis deleted successfully"}
+
+
+@router.get("/capabilities")
+async def get_capabilities():
+    """
+    Get service capabilities including PDF/OCR support status.
+    Useful for frontend to determine which file types are accepted.
+    """
+    pdf_caps = is_pdf_supported()
+    email_configured = email_service.is_configured()
+    
+    return {
+        "supported_formats": ["csv", "txt"] + (["pdf"] if pdf_caps.get("text_extraction") or pdf_caps.get("ocr_available") else []),
+        "pdf_support": {
+            "available": pdf_caps.get("text_extraction") or pdf_caps.get("ocr_available"),
+            "text_extraction": pdf_caps.get("text_extraction", False),
+            "ocr_available": pdf_caps.get("ocr_available", False),
+            "ocr_languages": pdf_caps.get("ocr_languages"),
+        },
+        "email_support": {
+            "available": email_configured,
+        },
+        "max_file_size_mb": 10
+    }
