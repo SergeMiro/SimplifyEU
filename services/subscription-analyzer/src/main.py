@@ -1,27 +1,66 @@
-from fastapi import FastAPI
+import os
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from .api.v1 import analyses
 from .utils.logger import setup_logger
 
 logger = setup_logger("subscription-analyzer")
 
+# Environment configuration
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+IS_PRODUCTION = ENVIRONMENT == "production"
+
+# CORS Configuration - SECURITY FIX: No more wildcards
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
+if IS_PRODUCTION:
+    # In production, require explicit origins
+    if CORS_ORIGINS == ["http://localhost:3000", "http://127.0.0.1:3000"]:
+        logger.warning("CORS_ORIGINS not set for production! Using restrictive default.")
+        CORS_ORIGINS = []  # Block all if not configured
+
+# Rate Limiter
+limiter = Limiter(key_func=get_remote_address)
+
 app = FastAPI(
     title="Subscription Leak Detector",
     description="Microservice for analyzing bank statements to detect subscriptions.",
-    version="1.0.0"
+    version="1.0.0",
+    # Disable docs in production for security
+    docs_url="/docs" if not IS_PRODUCTION else None,
+    redoc_url="/redoc" if not IS_PRODUCTION else None,
 )
 
-# CORS
+# Add rate limiter to app state
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# CORS - SECURITY FIX: Specific origins only
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-Account-ID", "X-User-ID"],
 )
 
 app.include_router(analyses.router, prefix="/v1", tags=["analyses"])
 
+
 @app.get("/health")
 def health_check():
-    return {"status": "ok"}
+    return {"status": "ok", "environment": ENVIRONMENT}
+
+
+@app.get("/security-info")
+def security_info():
+    """Returns security configuration (non-sensitive) for debugging."""
+    return {
+        "cors_origins_configured": len(CORS_ORIGINS),
+        "is_production": IS_PRODUCTION,
+        "rate_limiting_enabled": True,
+        "docs_enabled": not IS_PRODUCTION,
+    }

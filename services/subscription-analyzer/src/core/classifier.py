@@ -1,21 +1,42 @@
 import httpx
 import json
+import logging
 from ..config import settings
+from .cache import cache_get, cache_set, generate_cache_key
+
+logger = logging.getLogger(__name__)
+
 
 async def classify_merchant(descriptor: str, amount: float, frequency: str) -> dict:
     """
     Calls LLM API (Mistral or Chutes.ai) to classify if transaction is a subscription.
+    Results are cached for 24 hours to reduce API costs.
     """
+    # Generate cache key based on input parameters
+    cache_key = generate_cache_key(
+        prompt=f"{descriptor}|{amount}|{frequency}",
+        model=settings.LLM_PROVIDER,
+        temperature=0.0
+    )
+    
+    # Check cache first
+    cached_result = cache_get(cache_key)
+    if cached_result:
+        logger.debug(f"[CLASSIFIER] Cache HIT for: {descriptor[:30]}...")
+        return cached_result
+    
     # Quick mock return if no keys for testing
     if not settings.MISTRAL_API_KEY and not settings.CHUTES_API_KEY:
         # Fallback simple logic
         is_sub = "subscription" in descriptor.lower() or frequency in ["monthly", "annual"]
-        return {
+        result = {
             "is_subscription": is_sub,
             "merchant_name": descriptor.title(),
             "category": "Other",
             "confidence": 0.5
         }
+        cache_set(cache_key, result)
+        return result
 
     prompt = f"""
 You are a financial analyst. Analyze this recurring transaction:
@@ -65,13 +86,20 @@ Respond in JSON:
             response.raise_for_status()
             data = response.json()
             content = data['choices'][0]['message']['content']
-            return json.loads(content)
+            result = json.loads(content)
+            
+            # Cache successful result
+            cache_set(cache_key, result)
+            logger.debug(f"[CLASSIFIER] Cached result for: {descriptor[:30]}...")
+            
+            return result
         except Exception as e:
-            print(f"Mistral API error: {e}")
-            # Return safe default
+            logger.warning(f"[CLASSIFIER] LLM API error: {e}")
+            # Return safe default (don't cache errors)
             return {
                 "is_subscription": False,
                 "merchant_name": descriptor,
                 "category": "Unknown",
                 "confidence": 0.0
             }
+

@@ -1,11 +1,15 @@
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, BackgroundTasks, status, Header, Body
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, BackgroundTasks, status, Header, Body, Request
 from typing import List, Optional
 from uuid import UUID
 from pydantic import BaseModel, EmailStr
 import uuid
+import logging
 from datetime import datetime
 import io
 import httpx
+
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from ...auth.api_key import get_current_account
 from ...db.client import supabase
@@ -16,6 +20,11 @@ from ...core.detector import detect_subscriptions
 from ...core.pdf_generator import generate_pdf_report
 from ...core.email_service import email_service
 
+logger = logging.getLogger(__name__)
+
+# Rate limiter instance
+limiter = Limiter(key_func=get_remote_address)
+
 
 class SendReportRequest(BaseModel):
     """Request model for sending report via email."""
@@ -24,6 +33,7 @@ class SendReportRequest(BaseModel):
     recipient_name: Optional[str] = None
 
 router = APIRouter()
+
 
 async def run_analysis_task(analysis_id: str, account_id: str, file_content: bytes, source_type: str = "csv"):
     try:

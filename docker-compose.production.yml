@@ -1,0 +1,157 @@
+# Docker Compose for Production Deployment
+# 
+# This configuration includes:
+# - API service with multiple Gunicorn workers
+# - Celery workers for background tasks
+# - Celery beat for scheduled tasks
+# - Redis for caching and task queue (optional, use external in production)
+#
+# Usage:
+#   docker-compose -f docker-compose.production.yml up -d --scale api=2
+
+version: '3.8'
+
+services:
+  # ============================================
+  # API Service (FastAPI with Gunicorn)
+  # ============================================
+  api:
+    build:
+      context: ./services/subscription-analyzer
+      dockerfile: Dockerfile.production
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+      - CHUTES_API_KEY=${CHUTES_API_KEY}
+      - CHUTES_BASE_URL=${CHUTES_BASE_URL}
+      - LLM_PROVIDER=${LLM_PROVIDER:-mistral}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - CORS_ORIGINS=${CORS_ORIGINS}
+      - API_KEY_SALT=${API_KEY_SALT}
+      - GUNICORN_WORKERS=${GUNICORN_WORKERS:-4}
+      # SMTP
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - SMTP_SENDER_EMAIL=${SMTP_SENDER_EMAIL}
+      - SMTP_SENDER_NAME=${SMTP_SENDER_NAME}
+    depends_on:
+      - redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # ============================================
+  # Celery Worker (Background Tasks)
+  # ============================================
+  celery-worker:
+    build:
+      context: ./services/subscription-analyzer
+      dockerfile: Dockerfile.production
+    command: celery -A src.celery_app worker --loglevel=info --concurrency=4
+    environment:
+      - ENVIRONMENT=production
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+      - CHUTES_API_KEY=${CHUTES_API_KEY}
+      - LLM_PROVIDER=${LLM_PROVIDER:-mistral}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      # SMTP for email tasks
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - SMTP_SENDER_EMAIL=${SMTP_SENDER_EMAIL}
+      - SMTP_SENDER_NAME=${SMTP_SENDER_NAME}
+    depends_on:
+      - redis
+    restart: unless-stopped
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+
+  # ============================================
+  # Celery Beat (Scheduled Tasks)
+  # ============================================
+  celery-beat:
+    build:
+      context: ./services/subscription-analyzer
+      dockerfile: Dockerfile.production
+    command: celery -A src.celery_app beat --loglevel=info
+    environment:
+      - ENVIRONMENT=production
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+    depends_on:
+      - redis
+    restart: unless-stopped
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+
+  # ============================================
+  # Redis (Development only - use managed Redis in production)
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+  # ============================================
+  # Nginx Load Balancer (Optional)
+  # ============================================
+  # nginx:
+  #   image: nginx:alpine
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/nginx.conf:ro
+  #     - ./ssl:/etc/nginx/ssl:ro
+  #   depends_on:
+  #     - api
+  #   restart: unless-stopped
+
+volumes:
+  redis_data:
+
+networks:
+  default:
+    driver: bridge
