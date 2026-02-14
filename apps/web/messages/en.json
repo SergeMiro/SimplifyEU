@@ -1,0 +1,16 @@
+{
+  "HomePage": {
+    "title": "Welcome to SimplifyEU",
+    "description": "The best platform for business management."
+  },
+  "Auth": {
+    "welcomeBack": "Welcome Back",
+    "signIn": "Sign In",
+    "email": "Email",
+    "password": "Password"
+  },
+  "Navigation": {
+    "dashboard": "Dashboard",
+    "login": "Login"
+  }
+}

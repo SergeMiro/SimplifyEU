@@ -1,0 +1,16 @@
+{
+  "HomePage": {
+    "title": "Bienvenido a SimplifyEU",
+    "description": "La mejor plataforma de gestión empresarial."
+  },
+  "Auth": {
+    "welcomeBack": "Bienvenido",
+    "signIn": "Iniciar sesión",
+    "email": "Correo electrónico",
+    "password": "Contraseña"
+  },
+  "Navigation": {
+    "dashboard": "Panel de control",
+    "login": "Iniciar sesión"
+  }
+}

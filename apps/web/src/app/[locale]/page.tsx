@@ -1,5 +1,7 @@
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import { Link } from '@/i18n/routing';
+import { useTranslations } from 'next-intl';
+import LanguageSwitcher from '@/components/language-switcher';
+import { Button } from '@/components/ui/button';
 import {
   ArrowRight,
   BarChart3,
@@ -9,9 +11,13 @@ import {
   Sparkles,
   Users,
   Zap,
-} from "lucide-react";
+} from 'lucide-react';
 
 export default function Home() {
+  const t = useTranslations('HomePage');
+  const tNav = useTranslations('Navigation');
+  const tAuth = useTranslations('Auth');
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -24,20 +30,30 @@ export default function Home() {
             <span className="text-xl font-bold">SimplifyEU</span>
           </div>
           <nav className="hidden md:flex items-center space-x-6">
-            <Link href="#features" className="text-muted-foreground hover:text-foreground">
+            <Link
+              href="#features"
+              className="text-muted-foreground hover:text-foreground"
+            >
               Features
             </Link>
-            <Link href="#pricing" className="text-muted-foreground hover:text-foreground">
+            <Link
+              href="#pricing"
+              className="text-muted-foreground hover:text-foreground"
+            >
               Pricing
             </Link>
             <Link href="/ai-test">
-              <Button variant="outline" className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 border-purple-500/30 hover:border-purple-500">
+              <Button
+                variant="outline"
+                className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 border-purple-500/30 hover:border-purple-500"
+              >
                 <Sparkles className="mr-2 h-4 w-4 text-purple-500" />
                 AI Test
               </Button>
             </Link>
+            <LanguageSwitcher />
             <Link href="/auth/login">
-              <Button variant="ghost">Sign In</Button>
+              <Button variant="ghost">{tAuth('signIn')}</Button>
             </Link>
             <Link href="/auth/register">
               <Button>Get Started</Button>
@@ -50,13 +66,12 @@ export default function Home() {
       <section className="py-20 md:py-32">
         <div className="container mx-auto px-4 text-center">
           <h1 className="text-4xl md:text-6xl font-bold tracking-tight mb-6">
-            Simplify Your Business
+            {t('title')}
             <br />
             <span className="text-primary">Management Platform</span>
           </h1>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-8">
-            All-in-one solution for managing your business: invoicing, subscriptions,
-            team collaboration, and analytics. Built for European businesses.
+            {t('description')}
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link href="/auth/register">
@@ -127,10 +142,10 @@ export default function Home() {
               price="€29"
               description="Perfect for small businesses"
               features={[
-                "Up to 5 team members",
-                "100 invoices/month",
-                "Basic analytics",
-                "Email support",
+                'Up to 5 team members',
+                '100 invoices/month',
+                'Basic analytics',
+                'Email support',
               ]}
             />
             <PricingCard
@@ -138,11 +153,11 @@ export default function Home() {
               price="€79"
               description="For growing businesses"
               features={[
-                "Up to 20 team members",
-                "Unlimited invoices",
-                "Advanced analytics",
-                "Priority support",
-                "API access",
+                'Up to 20 team members',
+                'Unlimited invoices',
+                'Advanced analytics',
+                'Priority support',
+                'API access',
               ]}
               highlighted
             />
@@ -151,12 +166,12 @@ export default function Home() {
               price="Custom"
               description="For large organizations"
               features={[
-                "Unlimited team members",
-                "Unlimited invoices",
-                "Custom analytics",
-                "24/7 support",
-                "Custom integrations",
-                "SLA guarantee",
+                'Unlimited team members',
+                'Unlimited invoices',
+                'Custom analytics',
+                '24/7 support',
+                'Custom integrations',
+                'SLA guarantee',
               ]}
             />
           </div>
@@ -199,30 +214,68 @@ export default function Home() {
             <div>
               <h4 className="font-semibold mb-4">Product</h4>
               <ul className="space-y-2 text-muted-foreground">
-                <li><Link href="#features" className="hover:text-foreground">Features</Link></li>
-                <li><Link href="#pricing" className="hover:text-foreground">Pricing</Link></li>
-                <li><Link href="#" className="hover:text-foreground">API</Link></li>
+                <li>
+                  <Link href="#features" className="hover:text-foreground">
+                    Features
+                  </Link>
+                </li>
+                <li>
+                  <Link href="#pricing" className="hover:text-foreground">
+                    Pricing
+                  </Link>
+                </li>
+                <li>
+                  <Link href="#" className="hover:text-foreground">
+                    API
+                  </Link>
+                </li>
               </ul>
             </div>
             <div>
               <h4 className="font-semibold mb-4">Company</h4>
               <ul className="space-y-2 text-muted-foreground">
-                <li><Link href="#" className="hover:text-foreground">About</Link></li>
-                <li><Link href="#" className="hover:text-foreground">Blog</Link></li>
-                <li><Link href="#" className="hover:text-foreground">Careers</Link></li>
+                <li>
+                  <Link href="#" className="hover:text-foreground">
+                    About
+                  </Link>
+                </li>
+                <li>
+                  <Link href="#" className="hover:text-foreground">
+                    Blog
+                  </Link>
+                </li>
+                <li>
+                  <Link href="#" className="hover:text-foreground">
+                    Careers
+                  </Link>
+                </li>
               </ul>
             </div>
             <div>
               <h4 className="font-semibold mb-4">Legal</h4>
               <ul className="space-y-2 text-muted-foreground">
-                <li><Link href="#" className="hover:text-foreground">Privacy</Link></li>
-                <li><Link href="#" className="hover:text-foreground">Terms</Link></li>
-                <li><Link href="#" className="hover:text-foreground">Security</Link></li>
+                <li>
+                  <Link href="#" className="hover:text-foreground">
+                    Privacy
+                  </Link>
+                </li>
+                <li>
+                  <Link href="#" className="hover:text-foreground">
+                    Terms
+                  </Link>
+                </li>
+                <li>
+                  <Link href="#" className="hover:text-foreground">
+                    Security
+                  </Link>
+                </li>
               </ul>
             </div>
           </div>
           <div className="border-t mt-8 pt-8 text-center text-muted-foreground">
-            <p>&copy; {new Date().getFullYear()} SimplifyEU. All rights reserved.</p>
+            <p>
+              &copy; {new Date().getFullYear()} SimplifyEU. All rights reserved.
+            </p>
           </div>
         </div>
       </footer>
@@ -264,15 +317,15 @@ function PricingCard({
   return (
     <div
       className={`p-6 rounded-lg border ${
-        highlighted
-          ? "border-primary bg-card shadow-lg scale-105"
-          : "bg-card"
+        highlighted ? 'border-primary bg-card shadow-lg scale-105' : 'bg-card'
       }`}
     >
       <h3 className="text-xl font-semibold mb-2">{title}</h3>
       <div className="text-4xl font-bold mb-2">
         {price}
-        <span className="text-md font-normal text-muted-foreground">/month</span>
+        <span className="text-md font-normal text-muted-foreground">
+          /month
+        </span>
       </div>
       <p className="text-muted-foreground mb-6">{description}</p>
       <ul className="space-y-3 mb-6">
@@ -296,7 +349,10 @@ function PricingCard({
         ))}
       </ul>
       <Link href="/auth/register" className="block">
-        <Button className="w-full" variant={highlighted ? "default" : "outline"}>
+        <Button
+          className="w-full"
+          variant={highlighted ? 'default' : 'outline'}
+        >
           Get Started
         </Button>
       </Link>
