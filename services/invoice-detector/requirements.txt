@@ -1,0 +1,37 @@
+# Invoice Duplicate Detector - Dependencies
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-multipart==0.0.12
+
+# Supabase
+supabase==2.13.0
+
+# PDF processing
+PyPDF2==3.0.1
+pdfplumber==0.11.4
+python-magic-bin==0.4.14
+
+# OCR fallback
+pytesseract==0.3.13
+Pillow==10.4.0
+
+# Fuzzy matching
+fuzzywuzzy[speedup]==0.18.0
+python-Levenshtein==0.25.1
+
+# Rate limiting
+slowapi==0.1.9
+
+# Settings management
+pydantic-settings==2.7.1
+
+# Auth
+passlib[bcrypt]==1.7.4
+
+# Production server
+gunicorn==22.0.0
+
+# Testing
+pytest==8.3.5
+pytest-asyncio==0.24.0
+httpx==0.28.1

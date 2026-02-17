@@ -16,7 +16,7 @@ tests=N/A 2026-01-31 12:52 | scope=repo | change=modified |
 files=TESTING_GUIDE.md,.github/workflows/test-services.yml | purpose=added
 manual API tests and GitHub Actions CI | tests=pytest 2026-01-31 13:15 |
 scope=services/subscription-analyzer | change=modified |
-files=tests/*,test*data/* | purpose=restructured tests: moved test_data inside
+files=tests/*,test*data/* | purpose=restructured tests: moved test*data inside
 tests folder for better logic 2026-01-31 13:21 |
 scope=services/subscription-analyzer | change=modified |
 files=tests/test_data/.gitkeep | purpose=ensure test_data folder structure is
@@ -65,5 +65,14 @@ passed) 2026-02-14 12:08 | scope=apps/web | change=modified | files=.env.local |
 purpose=update Supabase anon key to new publishable format to fix fetch error |
 tests=manual login verification needed 2026-02-14 13:10 | scope=apps/web |
 change=created |
-files=src/i18n/_,messages/_,src/middleware.ts,next.config.mjs,src/components/language-switcher.tsx
-| purpose=installed next-intl for i18n (EN, FR, ES) | tests=manual
+files=src/i18n/*,messages/\_,src/middleware.ts,next.config.mjs,src/components/language-switcher.tsx
+| purpose=installed next-intl for i18n (EN, FR, ES) | tests=manual 2026-02-17
+16:30 | scope=services/team-reminder-bot | change=created |
+files=src/**/\*,tests/**/_,Dockerfile,Dockerfile.production,gunicorn.conf.py,requirements.txt,README.md,.env.example,supabase/migrations/20260217_team_reminder_bot.sql
+| purpose=new Team Reminder Bot microservice: NLP time parsing, Slack Block Kit,
+context-aware reminders, background queue worker | tests=pytest (4 test files)
+2026-02-17 16:45 | scope=services/invoice-detector | change=created |
+files=src/\*\*/_,tests/\*_/_,Dockerfile,Dockerfile.production,gunicorn.conf.py,requirements.txt,README.md,.env.example,supabase/migrations/20260217_invoice_detector.sql
+| purpose=new Invoice Duplicate Detector microservice: PDF/OCR extraction,
+multi-language invoice parsing, weighted fuzzy similarity scoring | tests=pytest
+(4 test files)
