@@ -14,3 +14,22 @@ services:
       - REDIS_URL=${REDIS_URL}
     volumes:
       - ./services/subscription-analyzer:/app
+
+  crewai-agents:
+    build:
+      context: ./services/crewai-agents
+      dockerfile: Dockerfile
+    ports:
+      - "8003:8000"
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_SERVICE_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID}
+      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}
+      - TWILIO_WHATSAPP_FROM=${TWILIO_WHATSAPP_FROM}
+      - REDIS_URL=${REDIS_URL}
+    volumes:
+      - ./services/crewai-agents:/app
