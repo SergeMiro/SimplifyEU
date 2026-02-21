@@ -512,11 +512,11 @@ export default function AgentsPage() {
                   <div className="flex items-center gap-2">
                     <Badge
                       variant={
-                        log.status === "completed"
+                        (log.status === "completed"
                           ? "default"
                           : log.status === "failed"
                           ? "destructive"
-                          : "secondary"
+                          : "secondary") as "default" | "destructive" | "secondary"
                       }
                       className="text-xs"
                     >
