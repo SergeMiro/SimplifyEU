@@ -76,3 +76,4 @@ files=src/\*\*/_,tests/\*_/_,Dockerfile,Dockerfile.production,gunicorn.conf.py,r
 | purpose=new Invoice Duplicate Detector microservice: PDF/OCR extraction,
 multi-language invoice parsing, weighted fuzzy similarity scoring | tests=pytest
 (4 test files)
+2026-02-19 16:10 | scope=repo | change=verified+merged | files=services/crewai-agents/**,apps/web/**/agents/page.tsx,docker-compose.yml,supabase/migrations/20260219_crewai_agents.sql | purpose=Verified and confirmed merge of crewai-accounting-agents branch (60 files, 5317 lines) - PR#2 already merged on GitHub | tests=py_compile all Python files | notes=Fast-forward merge, no conflicts
