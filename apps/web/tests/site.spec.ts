@@ -12,14 +12,11 @@ test.describe('SimplifyEU Site Audit', () => {
 
       console.log(`Visiting: ${url}`);
       const response = await page.goto(url);
-      
-      // We expect pages to load (even if they show 500 locally, production should be better)
       expect(response?.status(), `Failed to load ${url}`).toBeLessThan(500);
 
       const links = await page.locator('a').all();
       for (const link of links) {
         const href = await link.getAttribute('href');
-        // Only internal links, ignore anchor links and cross-origin
         if (href && href.startsWith('/') && !href.startsWith('//') && !href.includes('#')) {
           if (!visited.has(href)) {
             toVisit.push(href);
@@ -35,7 +32,6 @@ test.describe('SimplifyEU Site Audit', () => {
     await expect(heroAiLink).toBeVisible();
     await heroAiLink.click();
     await expect(page).toHaveURL(/.*ai-test/);
-    // Page title should contain "Test the Future of Finance" or similar
     await expect(page.locator('h1')).toContainText(/Finance|Test/i);
   });
 
@@ -44,9 +40,9 @@ test.describe('SimplifyEU Site Audit', () => {
     await expect(page).toHaveURL(/.*dashboard/);
     await expect(page.locator('h1')).toContainText(/Welcome/i);
     
-    // Check if quick stats are visible
-    const statsContainer = page.locator('div:has-text("Quick Overview")');
-    await expect(statsContainer).toBeVisible();
+    // Check if quick stats are visible, use a more specific selector
+    const statsHeader = page.getByRole('heading', { name: /Quick Overview/i });
+    await expect(statsHeader).toBeVisible();
   });
 
   test('check login and register links', async ({ page }) => {
