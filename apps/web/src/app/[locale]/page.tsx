@@ -1,6 +1,7 @@
 import { Link } from '@/i18n/routing';
 import { useTranslations } from 'next-intl';
 import LanguageSwitcher from '@/components/language-switcher';
+import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
 import {
   ArrowRight,
@@ -43,6 +44,7 @@ export default function Home() {
               Integrations
             </Link>
             <LanguageSwitcher />
+            <ThemeToggle />
             <Link href="/auth/login">
               <Button variant="ghost" size="sm">{tAuth('signIn')}</Button>
             </Link>
@@ -54,6 +56,7 @@ export default function Home() {
           {/* Mobile Menu Button */}
           <div className="flex items-center md:hidden gap-2">
             <LanguageSwitcher />
+            <ThemeToggle />
             <Button variant="ghost" size="icon" className="md:hidden">
               <Menu className="h-5 w-5" />
             </Button>
@@ -186,6 +189,7 @@ export default function Home() {
           <Sparkles className="h-5 w-5" />
           <span className="text-[10px] mt-1 font-medium">AI Test</span>
         </Link>
+        <ThemeToggle />
         <Link href="/auth/login" className="flex flex-col items-center p-2 text-muted-foreground hover:text-primary transition-colors">
           <Users className="h-5 w-5" />
           <span className="text-[10px] mt-1 font-medium">Account</span>

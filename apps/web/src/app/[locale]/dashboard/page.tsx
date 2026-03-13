@@ -3,6 +3,8 @@
 import { Link } from "@/i18n/routing";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
+import LanguageSwitcher from "@/components/language-switcher";
 import { 
   CreditCard, 
   FileSearch, 
@@ -25,6 +27,8 @@ export default function DashboardPage() {
             <span className="text-xl font-bold">SimplifyEU</span>
           </div>
           <nav className="flex items-center space-x-4">
+            <LanguageSwitcher />
+            <ThemeToggle />
             <Link href="/">
               <Button variant="ghost" size="sm">Home</Button>
             </Link>

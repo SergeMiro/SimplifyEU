@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import LanguageSwitcher from "@/components/language-switcher";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { ArrowLeft, Send, Sparkles, Loader2, History, Trash2, ExternalLink } from "lucide-react";
 
 export default function AITestPage() {
@@ -128,6 +130,8 @@ export default function AITestPage() {
             </div>
           </div>
           <div className="hidden md:flex items-center space-x-4">
+            <LanguageSwitcher />
+            <ThemeToggle />
             <Link href="/dashboard/services/subscription-detector">
               <Button variant="outline" size="sm" className="border-purple-200 hover:border-purple-500 text-purple-600 dark:text-purple-400">
                 <ExternalLink className="mr-2 h-4 w-4" />
