@@ -1,0 +1,92 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - generic [ref=e7]: S
+          - generic [ref=e8]: SimplifyEU
+        - navigation [ref=e9]:
+          - link "Features" [ref=e10] [cursor=pointer]:
+            - /url: "#features"
+          - link "Integrations" [ref=e11] [cursor=pointer]:
+            - /url: "#integrations"
+          - generic [ref=e12]:
+            - button "EN" [ref=e13]
+            - button "FR" [ref=e14]
+            - button "ES" [ref=e15]
+          - link "Sign In" [ref=e16] [cursor=pointer]:
+            - /url: /en/auth/login
+            - button "Sign In" [ref=e17]
+          - link "Get Started" [ref=e18] [cursor=pointer]:
+            - /url: /en/auth/register
+            - button "Get Started" [ref=e19]
+    - main [ref=e20]:
+      - generic [ref=e22]:
+        - generic [ref=e23]: AI-Powered Management Platform
+        - heading "Welcome to SimplifyEU in the European Union" [level=1] [ref=e24]:
+          - text: Welcome to SimplifyEU
+          - generic [ref=e25]: in the European Union
+        - paragraph [ref=e26]: SimplifyEU is an all-in-one AI-driven service designed specifically for EU businesses. We provide seamless invoicing, subscription management, team collaboration, and powerful analytics, fully compliant with EU regulations.
+        - generic [ref=e27]:
+          - link "Start Free Trial" [ref=e28] [cursor=pointer]:
+            - /url: /en/auth/register
+            - button "Start Free Trial" [ref=e29]:
+              - text: Start Free Trial
+              - img [ref=e30]
+          - link "Try AI Test" [ref=e32] [cursor=pointer]:
+            - /url: /en/ai-test
+            - button "Try AI Test" [ref=e33]:
+              - img [ref=e34]
+              - text: Try AI Test
+      - generic [ref=e37]:
+        - generic [ref=e38]:
+          - heading "Powerful Integrations" [level=2] [ref=e39]
+          - paragraph [ref=e40]: Built on top of industry-leading services to ensure reliability, security, and performance.
+        - generic [ref=e41]:
+          - generic [ref=e42]:
+            - img [ref=e44]
+            - heading "Supabase" [level=3] [ref=e48]
+            - paragraph [ref=e49]: PostgreSQL database, real-time subscriptions, and secure authentication for your data.
+          - generic [ref=e50]:
+            - img [ref=e52]
+            - heading "Stripe" [level=3] [ref=e54]
+            - paragraph [ref=e55]: Secure payment processing, invoicing, and automated subscription management.
+          - generic [ref=e56]:
+            - img [ref=e58]
+            - heading "Vercel" [level=3] [ref=e60]
+            - paragraph [ref=e61]: Lightning-fast edge global deployment and hosting for seamless user experience.
+          - generic [ref=e62]:
+            - img [ref=e64]
+            - heading "OpenAI" [level=3] [ref=e76]
+            - paragraph [ref=e77]: Advanced AI models powering our smart analytics and automated business insights.
+      - generic [ref=e79]:
+        - heading "Core Capabilities" [level=2] [ref=e80]
+        - generic [ref=e81]:
+          - generic [ref=e82]:
+            - img [ref=e84]
+            - heading "Smart Invoicing" [level=3] [ref=e87]
+            - paragraph [ref=e88]: Create and send professional invoices in minutes. Support for multiple currencies and VAT compliance.
+          - generic [ref=e89]:
+            - img [ref=e91]
+            - heading "Team Collaboration" [level=3] [ref=e96]
+            - paragraph [ref=e97]: Invite team members, assign roles, and manage permissions across your organization.
+          - generic [ref=e98]:
+            - img [ref=e100]
+            - heading "Analytics" [level=3] [ref=e102]
+            - paragraph [ref=e103]: Real-time insights into your business performance with customizable dashboards.
+      - generic [ref=e105]:
+        - heading "Ready to Simplify Your Business?" [level=2] [ref=e106]
+        - paragraph [ref=e107]: Start your 14-day free trial today. No credit card required.
+        - link "Get Started Free" [ref=e108] [cursor=pointer]:
+          - /url: /en/auth/register
+          - button "Get Started Free" [ref=e109]:
+            - text: Get Started Free
+            - img [ref=e110]
+    - contentinfo [ref=e112]:
+      - paragraph [ref=e114]: © 2026 SimplifyEU. All rights reserved.
+  - region "Notifications alt+T"
+  - alert [ref=e115]
+```
