@@ -176,7 +176,13 @@ export const PaginatedResponse = z.object({
   limit: z.number(),
   totalPages: z.number(),
 });
-export type PaginatedResponse<T> = z.infer<typeof PaginatedResponse<T>>;
+export type PaginatedResponse<T> = {
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+};
 
 // Error Types
 export const ApiError = z.object({
@@ -185,16 +191,3 @@ export const ApiError = z.object({
   details: z.record(z.unknown()).optional(),
 });
 export type ApiError = z.infer<typeof ApiError>;
-
-// Export all schemas as types
-export type {
-  Users,
-  Accounts,
-  Memberships,
-  Subscriptions,
-  Invoices,
-  Services,
-  AccountServices,
-  ApiKeys,
-  AuditLogs,
-};
