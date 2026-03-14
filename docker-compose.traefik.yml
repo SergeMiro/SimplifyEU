@@ -1,0 +1,109 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks:
+      - web
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  subscription-analyzer:
+    build:
+      context: ./services/subscription-analyzer
+      dockerfile: Dockerfile
+    environment:
+      - ENVIRONMENT=production
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_SERVICE_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL}
+      - LLM_PROVIDER=openai
+      - LLM_MODEL=${LLM_MODEL}
+      - REDIS_URL=redis://redis:6379/0
+      - API_KEY_SALT=${API_KEY_SALT}
+      - CORS_ORIGINS=${CORS_ORIGINS}
+    networks:
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.simplify-api.rule=Host(`api.smiro.dev`)"
+      - "traefik.http.routers.simplify-api.entrypoints=websecure"
+      - "traefik.http.routers.simplify-api.tls.certresolver=myresolver"
+      - "traefik.http.services.simplify-api.loadbalancer.server.port=8000"
+    restart: unless-stopped
+
+  crewai-agents:
+    build:
+      context: ./services/crewai-agents
+      dockerfile: Dockerfile
+    environment:
+      - ENVIRONMENT=production
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_SERVICE_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL}
+      - LLM_PROVIDER=openai
+      - LLM_MODEL=${LLM_MODEL}
+      - REDIS_URL=redis://redis:6379/0
+      - API_KEY_SALT=${API_KEY_SALT}
+      - CORS_ORIGINS=${CORS_ORIGINS}
+    networks:
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.simplify-agents.rule=Host(`agents.smiro.dev`)"
+      - "traefik.http.routers.simplify-agents.entrypoints=websecure"
+      - "traefik.http.routers.simplify-agents.tls.certresolver=myresolver"
+      - "traefik.http.services.simplify-agents.loadbalancer.server.port=8000"
+    restart: unless-stopped
+
+  invoice-detector:
+    build:
+      context: ./services/invoice-detector
+      dockerfile: Dockerfile
+    environment:
+      - ENVIRONMENT=production
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_SERVICE_KEY}
+      - API_KEY_SALT=${API_KEY_SALT}
+      - CORS_ORIGINS=${CORS_ORIGINS}
+    networks:
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.simplify-invoices.rule=Host(`invoices.smiro.dev`)"
+      - "traefik.http.routers.simplify-invoices.entrypoints=websecure"
+      - "traefik.http.routers.simplify-invoices.tls.certresolver=myresolver"
+      - "traefik.http.services.simplify-invoices.loadbalancer.server.port=8002"
+    restart: unless-stopped
+
+  team-reminder-bot:
+    build:
+      context: ./services/team-reminder-bot
+      dockerfile: Dockerfile
+    environment:
+      - ENVIRONMENT=production
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_SERVICE_KEY}
+      - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN:-xoxb-placeholder}
+      - SLACK_SIGNING_SECRET=${SLACK_SIGNING_SECRET:-placeholder}
+      - API_KEY_SALT=${API_KEY_SALT}
+      - CORS_ORIGINS=${CORS_ORIGINS}
+    networks:
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.simplify-reminders.rule=Host(`reminders.smiro.dev`)"
+      - "traefik.http.routers.simplify-reminders.entrypoints=websecure"
+      - "traefik.http.routers.simplify-reminders.tls.certresolver=myresolver"
+      - "traefik.http.services.simplify-reminders.loadbalancer.server.port=8001"
+    restart: unless-stopped
+
+networks:
+  web:
+    external: true
+    name: infra_web
