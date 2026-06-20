@@ -45,3 +45,6 @@ venv.bak/
 
 # Project specific
 tailwind.config.ts.bak
+
+# postgres migration (secret — never commit)
+.env.postgres
