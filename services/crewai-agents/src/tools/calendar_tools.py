@@ -7,6 +7,12 @@ import json
 import logging
 from datetime import datetime, date, timedelta
 from crewai.tools import tool
+from sqlalchemy import select
+from ..db.session import SessionLocal
+from ..db.orm import (
+    Invoice as InvoiceRow,
+    TaxObligation as TaxObligationRow,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -236,41 +242,28 @@ def calculate_turnover_for_period(account_id: str, period_start: str, period_end
     Returns turnover breakdown.
     """
     try:
-        from ..db.client import supabase as db
+        with SessionLocal() as db:
+            # Fetch invoices in the period. NOTE: the core invoices table has no
+            # invoice_date/vendor_name columns (those live on detector_invoices),
+            # so we sum `amount` and filter by created_at — see database_tools note.
+            invoices = db.scalars(
+                select(InvoiceRow)
+                .where(InvoiceRow.account_id == account_id)
+                .where(InvoiceRow.created_at >= period_start)
+                .where(InvoiceRow.created_at <= period_end)
+            ).all()
 
-        # Fetch completed analyses in the period
-        analyses_res = (
-            db.table("analyses")
-            .select("id, total_transactions, subscriptions_found, potential_savings_eur")
-            .eq("account_id", account_id)
-            .eq("status", "completed")
-            .gte("created_at", period_start)
-            .lte("created_at", period_end)
-            .execute()
-        )
+            total_invoiced = sum(
+                float(inv.amount) if inv.amount is not None else 0 for inv in invoices
+            )
 
-        # Fetch income invoices in the period
-        invoices_res = (
-            db.table("invoices")
-            .select("total_amount, currency, invoice_date, vendor_name")
-            .eq("account_id", account_id)
-            .gte("invoice_date", period_start)
-            .lte("invoice_date", period_end)
-            .execute()
-        )
-
-        total_invoiced = sum(
-            inv.get("total_amount", 0) or 0 for inv in (invoices_res.data or [])
-        )
-
-        return json.dumps({
-            "period_start": period_start,
-            "period_end": period_end,
-            "total_invoiced_eur": round(total_invoiced, 2),
-            "invoice_count": len(invoices_res.data or []),
-            "analyses_count": len(analyses_res.data or []),
-            "note": "Ce montant est un brouillon basé sur les factures enregistrées. Vérifiez avant déclaration.",
-        })
+            return json.dumps({
+                "period_start": period_start,
+                "period_end": period_end,
+                "total_invoiced_eur": round(total_invoiced, 2),
+                "invoice_count": len(invoices),
+                "note": "Ce montant est un brouillon basé sur les factures enregistrées. Vérifiez avant déclaration.",
+            })
     except Exception as e:
         logger.error(f"Error calculating turnover: {e}")
         return json.dumps({"error": str(e)})
@@ -283,37 +276,44 @@ def check_upcoming_deadlines(account_id: str, days_ahead: int = 14) -> str:
     Returns obligations that are approaching their deadline.
     """
     try:
-        from ..db.client import supabase as db
-
         now = datetime.utcnow()
-        cutoff = (now + timedelta(days=days_ahead)).isoformat()
+        cutoff = now + timedelta(days=days_ahead)
 
-        res = (
-            db.table("tax_obligations")
-            .select("*")
-            .eq("account_id", account_id)
-            .in_("status", ["pending", "reminded"])
-            .lte("deadline", cutoff)
-            .order("deadline", desc=False)
-            .execute()
-        )
+        with SessionLocal() as db:
+            rows = db.scalars(
+                select(TaxObligationRow)
+                .where(TaxObligationRow.account_id == account_id)
+                .where(TaxObligationRow.status.in_(["pending", "reminded"]))
+                .where(TaxObligationRow.deadline <= cutoff)
+                .order_by(TaxObligationRow.deadline.asc())
+            ).all()
 
-        upcoming = []
-        for ob in (res.data or []):
-            deadline_dt = datetime.fromisoformat(ob["deadline"].replace("Z", "+00:00"))
-            days_remaining = (deadline_dt.replace(tzinfo=None) - now).days
-            upcoming.append({
-                **ob,
-                "days_remaining": days_remaining,
-                "is_overdue": days_remaining < 0,
-                "is_urgent": days_remaining <= 3,
+            upcoming = []
+            for ob in rows:
+                deadline_dt = ob.deadline
+                days_remaining = (deadline_dt.replace(tzinfo=None) - now).days
+                upcoming.append({
+                    "id": str(ob.id),
+                    "account_id": ob.account_id,
+                    "obligation_type": ob.obligation_type,
+                    "title": ob.title,
+                    "description": ob.description,
+                    "deadline": ob.deadline.isoformat() if ob.deadline else None,
+                    "status": ob.status,
+                    "draft_data": ob.draft_data,
+                    "service_url": ob.service_url,
+                    "created_at": ob.created_at.isoformat() if ob.created_at else None,
+                    "updated_at": ob.updated_at.isoformat() if ob.updated_at else None,
+                    "days_remaining": days_remaining,
+                    "is_overdue": days_remaining < 0,
+                    "is_urgent": days_remaining <= 3,
+                })
+
+            return json.dumps({
+                "upcoming": upcoming,
+                "count": len(upcoming),
+                "days_ahead": days_ahead,
             })
-
-        return json.dumps({
-            "upcoming": upcoming,
-            "count": len(upcoming),
-            "days_ahead": days_ahead,
-        })
     except Exception as e:
         logger.error(f"Error checking deadlines: {e}")
         return json.dumps({"error": str(e), "upcoming": []})

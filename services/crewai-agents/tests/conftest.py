@@ -8,55 +8,12 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
 
 # Set test environment before any imports
 os.environ["ENVIRONMENT"] = "development"
-os.environ["SUPABASE_URL"] = "http://localhost:54321"
-os.environ["SUPABASE_KEY"] = "test-key-for-testing"
-
-
-@pytest.fixture
-def mock_supabase():
-    """Mock Supabase client for all tests."""
-    with patch("src.db.client.supabase") as mock:
-        # Set up chain-able mock methods
-        mock.table.return_value = mock
-        mock.select.return_value = mock
-        mock.insert.return_value = mock
-        mock.update.return_value = mock
-        mock.delete.return_value = mock
-        mock.eq.return_value = mock
-        mock.neq.return_value = mock
-        mock.gte.return_value = mock
-        mock.lte.return_value = mock
-        mock.in_.return_value = mock
-        mock.ilike.return_value = mock
-        mock.order.return_value = mock
-        mock.limit.return_value = mock
-        mock.execute.return_value = MagicMock(data=[])
-        yield mock
-
-
-@pytest.fixture
-def mock_supabase_with_data():
-    """Mock Supabase client that returns configurable data."""
-    with patch("src.db.client.supabase") as mock:
-        mock_chain = MagicMock()
-        mock_chain.select.return_value = mock_chain
-        mock_chain.insert.return_value = mock_chain
-        mock_chain.update.return_value = mock_chain
-        mock_chain.delete.return_value = mock_chain
-        mock_chain.eq.return_value = mock_chain
-        mock_chain.neq.return_value = mock_chain
-        mock_chain.gte.return_value = mock_chain
-        mock_chain.lte.return_value = mock_chain
-        mock_chain.in_.return_value = mock_chain
-        mock_chain.ilike.return_value = mock_chain
-        mock_chain.order.return_value = mock_chain
-        mock_chain.limit.return_value = mock_chain
-        mock.table.return_value = mock_chain
-        yield mock, mock_chain
+os.environ.setdefault(
+    "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/simplifyeu_db"
+)
 
 
 @pytest.fixture

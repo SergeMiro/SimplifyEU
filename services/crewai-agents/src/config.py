@@ -1,5 +1,3 @@
-import os
-import secrets
 from pydantic_settings import BaseSettings
 from pydantic import ConfigDict
 
@@ -9,7 +7,7 @@ class Settings(BaseSettings):
     CrewAI Agents service configuration.
 
     SECURITY NOTES:
-    - API_KEY_SALT is auto-generated if not provided (should be set in production)
+    - SERVICE_API_KEY must be set in production (shared key the web app sends).
     - WhatsApp/Twilio credentials must be set for notification features
     - LLM API keys are required for agent intelligence
     """
@@ -26,9 +24,15 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
 
-    # Supabase
-    SUPABASE_URL: str = "http://localhost:54321"
-    SUPABASE_KEY: str = "test-key"
+    # Database (plain Postgres via SQLAlchemy + psycopg 3)
+    DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/simplifyeu_db"
+
+    # Better Auth JWT verification (web app JWKS endpoint)
+    BETTER_AUTH_JWKS_URL: str | None = None
+    JWKS_CACHE_SECONDS: int = 300
+
+    # Security - shared service key the web app sends in X-API-Key. MUST be set in production.
+    SERVICE_API_KEY: str | None = None
 
     # LLM Providers
     OPENAI_API_KEY: str | None = None
@@ -55,9 +59,6 @@ class Settings(BaseSettings):
     # Redis
     REDIS_URL: str | None = None
 
-    # Security
-    API_KEY_SALT: str | None = None
-
     # Agent defaults
     WEEKLY_REPORT_DAY: str = "monday"
     WEEKLY_REPORT_HOUR: int = 8
@@ -74,18 +75,6 @@ class Settings(BaseSettings):
             for origin in self.CORS_ORIGINS.split(",")
             if origin.strip()
         ]
-
-    @property
-    def api_key_salt_value(self) -> str:
-        if self.API_KEY_SALT:
-            return self.API_KEY_SALT
-        if self.is_production:
-            import warnings
-            warnings.warn(
-                "API_KEY_SALT not set in production!",
-                UserWarning,
-            )
-        return secrets.token_urlsafe(32)
 
     @property
     def whatsapp_configured(self) -> bool:
@@ -105,8 +94,11 @@ settings = Settings()
 if settings.is_production:
     import warnings
 
-    if not settings.API_KEY_SALT:
-        warnings.warn("API_KEY_SALT should be explicitly set in production!", UserWarning)
+    if not settings.SERVICE_API_KEY:
+        warnings.warn("SERVICE_API_KEY not set in production!", UserWarning)
+
+    if not settings.BETTER_AUTH_JWKS_URL:
+        warnings.warn("BETTER_AUTH_JWKS_URL not set in production!", UserWarning)
 
     if not settings.whatsapp_configured:
         warnings.warn("WhatsApp/Twilio not configured — notifications disabled!", UserWarning)

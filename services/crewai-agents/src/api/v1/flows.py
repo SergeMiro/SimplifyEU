@@ -4,9 +4,16 @@ API endpoints for triggering and managing agent flows.
 
 import logging
 import uuid
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 from ...auth.api_key import get_current_account
-from ...db.client import supabase
+from ...db.session import SessionLocal, get_db
+from ...db.orm import (
+    AgentSetting as AgentSettingRow,
+    AgentExecutionLog as AgentExecutionLogRow,
+)
 from ...db.models import FlowTriggerRequest, FlowTriggerResponse
 from ...flows import (
     FinancialFlow,
@@ -49,19 +56,33 @@ FLOW_REGISTRY = {
 }
 
 
-def _is_agent_enabled(account_id: str, agent_type: str) -> bool:
+def _execution_log_to_dict(log: AgentExecutionLogRow) -> dict:
+    return {
+        "id": str(log.id),
+        "account_id": log.account_id,
+        "agent_type": log.agent_type,
+        "flow_name": log.flow_name,
+        "trigger": log.trigger,
+        "status": log.status,
+        "input_data": log.input_data,
+        "output_data": log.output_data,
+        "error_message": log.error_message,
+        "started_at": log.started_at.isoformat() if log.started_at else None,
+        "completed_at": log.completed_at.isoformat() if log.completed_at else None,
+    }
+
+
+def _is_agent_enabled(db: Session, account_id: str, agent_type: str) -> bool:
     """Check if the corresponding agent is enabled for this account."""
     try:
-        res = (
-            supabase.table("agent_settings")
-            .select("status")
-            .eq("account_id", account_id)
-            .eq("agent_type", agent_type)
+        row = db.scalars(
+            select(AgentSettingRow)
+            .where(AgentSettingRow.account_id == account_id)
+            .where(AgentSettingRow.agent_type == agent_type)
             .limit(1)
-            .execute()
-        )
-        if res.data:
-            return res.data[0].get("status") == "enabled"
+        ).first()
+        if row is not None:
+            return row.status == "enabled"
         return False
     except Exception:
         return False
@@ -80,15 +101,19 @@ def _run_flow_in_background(
 
     # Create execution log
     try:
-        supabase.table("agent_execution_logs").insert({
-            "id": execution_id,
-            "account_id": account_id,
-            "agent_type": flow_info["agent_type"],
-            "flow_name": flow_name,
-            "trigger": trigger,
-            "status": "running",
-            "input_data": trigger_data,
-        }).execute()
+        with SessionLocal() as db:
+            db.add(
+                AgentExecutionLogRow(
+                    id=uuid.UUID(execution_id),
+                    account_id=account_id,
+                    agent_type=flow_info["agent_type"],
+                    flow_name=flow_name,
+                    trigger=trigger,
+                    status="running",
+                    input_data=trigger_data,
+                )
+            )
+            db.commit()
     except Exception as e:
         logger.error(f"Failed to create execution log: {e}")
 
@@ -99,29 +124,38 @@ def _run_flow_in_background(
         result = flow.kickoff()
 
         # Update execution log on success
-        supabase.table("agent_execution_logs").update({
-            "status": "completed",
-            "output_data": {"result": str(result)},
-        }).eq("id", execution_id).execute()
+        with SessionLocal() as db:
+            log = db.get(AgentExecutionLogRow, uuid.UUID(execution_id))
+            if log is not None:
+                log.status = "completed"
+                log.output_data = {"result": str(result)}
+                log.completed_at = datetime.now(timezone.utc)
+                db.commit()
 
         logger.info(f"Flow '{flow_name}' completed for account {account_id}")
     except Exception as e:
         logger.error(f"Flow '{flow_name}' failed: {e}")
         try:
-            supabase.table("agent_execution_logs").update({
-                "status": "failed",
-                "error_message": str(e),
-            }).eq("id", execution_id).execute()
+            with SessionLocal() as db:
+                log = db.get(AgentExecutionLogRow, uuid.UUID(execution_id))
+                if log is not None:
+                    log.status = "failed"
+                    log.error_message = str(e)
+                    log.completed_at = datetime.now(timezone.utc)
+                    db.commit()
         except Exception:
             pass
 
 
 @router.get("/flows")
-async def list_available_flows(account_id: str = Depends(get_current_account)):
+async def list_available_flows(
+    account_id: str = Depends(get_current_account),
+    db: Session = Depends(get_db),
+):
     """List all available flows and their current status."""
     flows = []
     for name, info in FLOW_REGISTRY.items():
-        enabled = _is_agent_enabled(account_id, info["agent_type"])
+        enabled = _is_agent_enabled(db, account_id, info["agent_type"])
         flows.append({
             "name": name,
             "agent_type": info["agent_type"],
@@ -137,6 +171,7 @@ async def trigger_flow(
     background_tasks: BackgroundTasks,
     trigger_data: FlowTriggerRequest | None = None,
     account_id: str = Depends(get_current_account),
+    db: Session = Depends(get_db),
 ):
     """Trigger a specific flow for the current account."""
     if flow_name not in FLOW_REGISTRY:
@@ -148,7 +183,7 @@ async def trigger_flow(
     flow_info = FLOW_REGISTRY[flow_name]
 
     # Check if agent is enabled
-    if not _is_agent_enabled(account_id, flow_info["agent_type"]):
+    if not _is_agent_enabled(db, account_id, flow_info["agent_type"]):
         raise HTTPException(
             status_code=403,
             detail=f"Agent '{flow_info['agent_type']}' is not enabled. "
@@ -179,22 +214,23 @@ async def get_flow_executions(
     account_id: str = Depends(get_current_account),
     flow_name: str | None = None,
     limit: int = 20,
+    db: Session = Depends(get_db),
 ):
     """Get recent flow execution history."""
     try:
         query = (
-            supabase.table("agent_execution_logs")
-            .select("*")
-            .eq("account_id", account_id)
-            .order("started_at", desc=True)
+            select(AgentExecutionLogRow)
+            .where(AgentExecutionLogRow.account_id == account_id)
+            .order_by(AgentExecutionLogRow.started_at.desc())
             .limit(min(limit, 100))
         )
 
         if flow_name:
-            query = query.eq("flow_name", flow_name)
+            query = query.where(AgentExecutionLogRow.flow_name == flow_name)
 
-        res = query.execute()
-        return {"executions": res.data or [], "count": len(res.data or [])}
+        rows = db.scalars(query).all()
+        executions = [_execution_log_to_dict(r) for r in rows]
+        return {"executions": executions, "count": len(executions)}
     except Exception as e:
         logger.error(f"Error fetching executions: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch executions")
@@ -204,20 +240,19 @@ async def get_flow_executions(
 async def get_execution_detail(
     execution_id: str,
     account_id: str = Depends(get_current_account),
+    db: Session = Depends(get_db),
 ):
     """Get details of a specific flow execution."""
     try:
-        res = (
-            supabase.table("agent_execution_logs")
-            .select("*")
-            .eq("id", execution_id)
-            .eq("account_id", account_id)
+        row = db.scalars(
+            select(AgentExecutionLogRow)
+            .where(AgentExecutionLogRow.id == execution_id)
+            .where(AgentExecutionLogRow.account_id == account_id)
             .limit(1)
-            .execute()
-        )
-        if not res.data:
+        ).first()
+        if row is None:
             raise HTTPException(status_code=404, detail="Execution not found")
-        return res.data[0]
+        return _execution_log_to_dict(row)
     except HTTPException:
         raise
     except Exception as e:

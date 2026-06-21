@@ -9,10 +9,30 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from crewai.tools import tool
+from sqlalchemy import select
 from ..config import settings
-from ..db.client import supabase
+from ..db.session import SessionLocal
+from ..db.orm import (
+    AgentNotification as AgentNotificationRow,
+    AgentSetting as AgentSettingRow,
+    BusinessProfile as BusinessProfileRow,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _business_profile_to_dict(p: BusinessProfileRow) -> dict:
+    return {
+        "id": str(p.id),
+        "account_id": p.account_id,
+        "business_type": p.business_type,
+        "tax_regime": p.tax_regime,
+        "declaration_frequency": p.declaration_frequency,
+        "tva_applicable": p.tva_applicable,
+        "siret": p.siret,
+        "created_at": p.created_at.isoformat() if p.created_at else None,
+        "updated_at": p.updated_at.isoformat() if p.updated_at else None,
+    }
 
 
 def _get_twilio_client():
@@ -110,23 +130,26 @@ def save_in_app_notification(
     action_url: optional deep link within the app
     """
     try:
-        insert_data = {
-            "account_id": account_id,
-            "title": title,
-            "message": message,
-            "notification_type": notification_type,
-            "read": False,
-        }
-        if action_url:
-            insert_data["action_url"] = action_url
-        if agent_type:
-            insert_data["agent_type"] = agent_type
+        with SessionLocal() as db:
+            row = AgentNotificationRow(
+                account_id=account_id,
+                title=title,
+                message=message,
+                notification_type=notification_type,
+                read=False,
+            )
+            if action_url:
+                row.action_url = action_url
+            if agent_type:
+                row.agent_type = agent_type
 
-        res = supabase.table("agent_notifications").insert(insert_data).execute()
-        return json.dumps({
-            "saved": True,
-            "notification_id": res.data[0]["id"] if res.data else None,
-        })
+            db.add(row)
+            db.commit()
+            db.refresh(row)
+            return json.dumps({
+                "saved": True,
+                "notification_id": str(row.id),
+            })
     except Exception as e:
         logger.error(f"Error saving notification: {e}")
         return json.dumps({"saved": False, "error": str(e)})
@@ -138,37 +161,34 @@ def get_user_contact_info(account_id: str) -> str:
     Fetch the user's notification preferences and contact info (phone, email).
     """
     try:
-        res = (
-            supabase.table("agent_settings")
-            .select("notification_channels, config")
-            .eq("account_id", account_id)
-            .limit(1)
-            .execute()
-        )
+        with SessionLocal() as db:
+            setting = db.scalars(
+                select(AgentSettingRow)
+                .where(AgentSettingRow.account_id == account_id)
+                .limit(1)
+            ).first()
 
-        profile_res = (
-            supabase.table("business_profiles")
-            .select("*")
-            .eq("account_id", account_id)
-            .limit(1)
-            .execute()
-        )
+            profile = db.scalars(
+                select(BusinessProfileRow)
+                .where(BusinessProfileRow.account_id == account_id)
+                .limit(1)
+            ).first()
 
-        notification_channels = []
-        config = {}
-        if res.data:
-            notification_channels = res.data[0].get("notification_channels", [])
-            config = res.data[0].get("config", {})
+            notification_channels = []
+            config = {}
+            if setting is not None:
+                notification_channels = setting.notification_channels or []
+                config = setting.config or {}
 
-        phone = config.get("whatsapp_phone", None)
-        email = config.get("notification_email", None)
+            phone = config.get("whatsapp_phone", None)
+            email = config.get("notification_email", None)
 
-        return json.dumps({
-            "channels": notification_channels,
-            "phone": phone,
-            "email": email,
-            "profile": profile_res.data[0] if profile_res.data else None,
-        })
+            return json.dumps({
+                "channels": notification_channels,
+                "phone": phone,
+                "email": email,
+                "profile": _business_profile_to_dict(profile) if profile is not None else None,
+            })
     except Exception as e:
         logger.error(f"Error fetching contact info: {e}")
         return json.dumps({"error": str(e)})

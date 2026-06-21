@@ -1,8 +1,26 @@
 """Tests for notification tools."""
 
 import json
-import pytest
 from unittest.mock import patch, MagicMock
+
+
+def _session_cm(session):
+    """Build a context-manager mock whose __enter__ yields `session`,
+    matching `with SessionLocal() as db:` usage in the tools."""
+    factory = MagicMock()
+    cm = MagicMock()
+    cm.__enter__.return_value = session
+    cm.__exit__.return_value = False
+    factory.return_value = cm
+    return factory
+
+
+def _scalars(values):
+    """Mock a db.scalars(...) result with .all()/.first()."""
+    res = MagicMock()
+    res.all.return_value = list(values)
+    res.first.return_value = values[0] if values else None
+    return res
 
 
 class TestNotificationTools:
@@ -39,13 +57,18 @@ class TestNotificationTools:
         assert data["sent"] is False
         assert data["reason"] == "SMTP not configured"
 
-    @patch("src.tools.notification_tools.supabase")
-    def test_save_in_app_notification(self, mock_db):
+    @patch("src.tools.notification_tools.SessionLocal")
+    def test_save_in_app_notification(self, mock_factory):
         """Test saving an in-app notification."""
-        mock_chain = MagicMock()
-        mock_chain.insert.return_value = mock_chain
-        mock_chain.execute.return_value = MagicMock(data=[{"id": "notif-1"}])
-        mock_db.table.return_value = mock_chain
+        import uuid
+
+        new_id = uuid.UUID("00000000-0000-0000-0000-000000000111")
+        session = MagicMock()
+
+        def _add(obj):
+            obj.id = new_id
+        session.add.side_effect = _add
+        mock_factory.return_value = _session_cm(session).return_value
 
         from src.tools.notification_tools import save_in_app_notification
         result = save_in_app_notification.run(
@@ -58,15 +81,20 @@ class TestNotificationTools:
         data = json.loads(result)
 
         assert data["saved"] is True
-        assert data["notification_id"] == "notif-1"
+        assert data["notification_id"] == str(new_id)
 
-    @patch("src.tools.notification_tools.supabase")
-    def test_save_in_app_notification_with_action_url(self, mock_db):
+    @patch("src.tools.notification_tools.SessionLocal")
+    def test_save_in_app_notification_with_action_url(self, mock_factory):
         """Test saving in-app notification with action URL."""
-        mock_chain = MagicMock()
-        mock_chain.insert.return_value = mock_chain
-        mock_chain.execute.return_value = MagicMock(data=[{"id": "notif-2"}])
-        mock_db.table.return_value = mock_chain
+        import uuid
+
+        new_id = uuid.UUID("00000000-0000-0000-0000-000000000222")
+        session = MagicMock()
+
+        def _add(obj):
+            obj.id = new_id
+        session.add.side_effect = _add
+        mock_factory.return_value = _session_cm(session).return_value
 
         from src.tools.notification_tools import save_in_app_notification
         result = save_in_app_notification.run(
@@ -80,24 +108,31 @@ class TestNotificationTools:
 
         assert data["saved"] is True
 
-    @patch("src.tools.notification_tools.supabase")
-    def test_get_user_contact_info(self, mock_db):
+    @patch("src.tools.notification_tools.SessionLocal")
+    def test_get_user_contact_info(self, mock_factory):
         """Test fetching user contact information."""
-        mock_chain = MagicMock()
-        mock_chain.select.return_value = mock_chain
-        mock_chain.eq.return_value = mock_chain
-        mock_chain.limit.return_value = mock_chain
-        mock_chain.execute.side_effect = [
-            MagicMock(data=[{
-                "notification_channels": ["whatsapp", "in_app"],
-                "config": {
-                    "whatsapp_phone": "+33612345678",
-                    "notification_email": "user@example.com",
-                },
-            }]),
-            MagicMock(data=[{"business_type": "micro_entrepreneur"}]),
-        ]
-        mock_db.table.return_value = mock_chain
+        setting = MagicMock()
+        setting.notification_channels = ["whatsapp", "in_app"]
+        setting.config = {
+            "whatsapp_phone": "+33612345678",
+            "notification_email": "user@example.com",
+        }
+
+        profile = MagicMock()
+        profile.id = "00000000-0000-0000-0000-000000000333"
+        profile.account_id = "test-123"
+        profile.business_type = "micro_entrepreneur"
+        profile.tax_regime = "micro"
+        profile.declaration_frequency = "monthly"
+        profile.tva_applicable = False
+        profile.siret = None
+        profile.created_at = None
+        profile.updated_at = None
+
+        session = MagicMock()
+        # First scalars() -> agent_settings, second -> business_profiles
+        session.scalars.side_effect = [_scalars([setting]), _scalars([profile])]
+        mock_factory.return_value = _session_cm(session).return_value
 
         from src.tools.notification_tools import get_user_contact_info
         result = get_user_contact_info.run(account_id="test-123")
@@ -107,10 +142,10 @@ class TestNotificationTools:
         assert data["email"] == "user@example.com"
         assert "whatsapp" in data["channels"]
 
-    @patch("src.tools.notification_tools.supabase")
-    def test_save_notification_error_handling(self, mock_db):
+    @patch("src.tools.notification_tools.SessionLocal")
+    def test_save_notification_error_handling(self, mock_factory):
         """Test error handling when saving notification fails."""
-        mock_db.table.side_effect = Exception("DB error")
+        mock_factory.side_effect = Exception("DB error")
 
         from src.tools.notification_tools import save_in_app_notification
         result = save_in_app_notification.run(

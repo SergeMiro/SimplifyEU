@@ -1,16 +1,13 @@
-import os
 import logging
-from fastapi import Security, HTTPException, status, Header
+import secrets
+
+from fastapi import Header, HTTPException, Security, status
 from fastapi.security.api_key import APIKeyHeader
-from passlib.context import CryptContext
-from ..db.client import supabase
+
+from ..config import settings
 
 logger = logging.getLogger(__name__)
 
-ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
-IS_PRODUCTION = ENVIRONMENT == "production"
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
@@ -19,8 +16,18 @@ async def get_current_account(
     account_id: str = Header(..., alias="X-Account-ID"),
 ) -> str:
     """
-    Validates API Key and returns account_id.
+    Validate the service X-API-Key and return the account_id (team scope).
+
+    The web app calls this service with a shared service key in X-API-Key and
+    the tenant id in X-Account-ID.
+
+    SECURITY NOTES:
+    - Test/demo keys are ONLY honored in non-production environments.
+    - The configured SERVICE_API_KEY is compared in constant time.
+    - API keys are NEVER logged.
     """
+    logger.debug("[AUTH] Service-key request for account: %s", account_id)
+
     if not api_key:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -33,51 +40,27 @@ async def get_current_account(
             detail="Missing X-Account-ID header",
         )
 
-    # Dev/test key bypass — non-production only
-    if not IS_PRODUCTION:
-        if api_key.startswith("sk_test_") or api_key == "demo-key":
+    is_test_key = api_key.startswith("sk_test_") or api_key == "demo-key"
+
+    # Development/demo override - ONLY in non-production.
+    if not settings.is_production:
+        if is_test_key:
             logger.warning("[AUTH] Test/demo key used - DEV MODE ONLY")
             return account_id
-    else:
-        if api_key.startswith("sk_test_") or api_key == "demo-key":
-            logger.warning("[AUTH] Test key rejected in production!")
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Test API keys are not allowed in production",
-            )
-
-    try:
-        res = (
-            supabase.table("api_keys")
-            .select("id, key_hash, is_active")
-            .eq("account_id", account_id)
-            .execute()
+    elif is_test_key:
+        logger.warning("[AUTH] Test key rejected in production!")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Test API keys are not allowed in production",
         )
-        keys = res.data
 
-        if not keys:
-            raise HTTPException(status_code=403, detail="Invalid API Key")
+    # Validate against the configured service key (constant-time compare).
+    if not settings.SERVICE_API_KEY:
+        logger.error("[AUTH] SERVICE_API_KEY not configured")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid API Key")
 
-        is_valid = False
-        for k in keys:
-            if not k.get("is_active", True):
-                continue
-            stored_hash = k.get("key_hash") or k.get("key")
-            if stored_hash:
-                try:
-                    if pwd_context.verify(api_key, stored_hash):
-                        is_valid = True
-                        break
-                except Exception:
-                    continue
-
-        if not is_valid:
-            raise HTTPException(status_code=403, detail="Invalid API Key")
-
-    except HTTPException:
-        raise
-    except Exception:
-        logger.error("[AUTH] Database error during authentication")
-        raise HTTPException(status_code=403, detail="Authentication failed")
+    if not secrets.compare_digest(api_key, settings.SERVICE_API_KEY):
+        logger.warning("[AUTH] Service API key validation failed")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid API Key")
 
     return account_id

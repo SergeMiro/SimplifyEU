@@ -1,10 +1,11 @@
 import os
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from .api.v1 import agents, flows, settings
+from .auth.jwt_auth import require_jwt
 from .utils.logger import setup_logger
 
 logger = setup_logger("crewai-agents")
@@ -51,10 +52,19 @@ app.add_middleware(
     ],
 )
 
-# Register API routers
-app.include_router(agents.router, prefix="/v1", tags=["agents"])
-app.include_router(flows.router, prefix="/v1", tags=["flows"])
-app.include_router(settings.router, prefix="/v1", tags=["settings"])
+# Register API routers.
+# require_jwt enforces the Better Auth Bearer JWT on every /v1 route (with a
+# dev/test-key bypass in non-production); get_current_account inside each route
+# still provides the account/tenant scope.
+app.include_router(
+    agents.router, prefix="/v1", tags=["agents"], dependencies=[Depends(require_jwt)]
+)
+app.include_router(
+    flows.router, prefix="/v1", tags=["flows"], dependencies=[Depends(require_jwt)]
+)
+app.include_router(
+    settings.router, prefix="/v1", tags=["settings"], dependencies=[Depends(require_jwt)]
+)
 
 
 @app.get("/health")
