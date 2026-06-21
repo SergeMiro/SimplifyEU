@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Link } from "@/i18n/routing";
-import { createClient } from "@/lib/supabase/client";
+import { signUp } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,30 +17,26 @@ export default function RegisterPage() {
   const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
-  const supabase = createClient();
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      const { error } = await supabase.auth.signUp({
+      const { error } = await signUp.email({
         email,
         password,
-        options: {
-          data: {
-            full_name: fullName,
-          },
-        },
+        name: fullName,
       });
 
       if (error) {
-        toast.error(error.message);
+        toast.error(error.message ?? "Could not create account");
         return;
       }
 
-      toast.success("Account created! Please check your email to verify.");
-      router.push("/auth/login");
+      toast.success("Account created! You're all set.");
+      router.push("/dashboard");
+      router.refresh();
     } catch (error) {
       toast.error("An unexpected error occurred");
     } finally {
@@ -48,44 +44,16 @@ export default function RegisterPage() {
     }
   };
 
-  const handleGoogleLogin = async () => {
-    setLoading(true);
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
-        },
-      });
-
-      if (error) {
-        toast.error(error.message);
-      }
-    } catch (error) {
-      toast.error("An unexpected error occurred");
-    } finally {
-      setLoading(false);
-    }
+  // TODO (part 2): wire to signIn.social({ provider: "google" }) once OAuth
+  // provider keys are configured in src/lib/auth.ts.
+  const handleGoogleLogin = () => {
+    toast.info("Google sign-in is coming soon");
   };
 
-  const handleAppleLogin = async () => {
-    setLoading(true);
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "apple",
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
-        },
-      });
-
-      if (error) {
-        toast.error(error.message);
-      }
-    } catch (error) {
-      toast.error("An unexpected error occurred");
-    } finally {
-      setLoading(false);
-    }
+  // TODO (part 2): wire to signIn.social({ provider: "apple" }) once OAuth
+  // provider keys are configured in src/lib/auth.ts.
+  const handleAppleLogin = () => {
+    toast.info("Apple sign-in is coming soon");
   };
 
   return (

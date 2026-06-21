@@ -32,6 +32,10 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 
+// Better Auth tables (user/session/account/verification). Re-exported so the
+// drizzle adapter (src/lib/auth.ts) and the db client see them. See ./auth-schema.
+export * from "./auth-schema";
+
 // =============================================================================
 // Enums
 // =============================================================================

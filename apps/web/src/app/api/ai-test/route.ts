@@ -1,7 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
   try {
+    // Auth check: require a valid Better Auth session
+    const session = await auth.api.getSession({ headers: request.headers });
+    if (!session?.user) {
+      return NextResponse.json(
+        { error: "Unauthorized: valid session required" },
+        { status: 401 }
+      );
+    }
+
     const { prompt } = await request.json();
 
     if (!prompt) {
@@ -11,8 +21,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const CHUTES_API_KEY =
-      "cpk_2b8d86f9a766402d92d35d1edba975b5.f8003d77055654f78a00d2a590966c01.Aoldoa1mghrWc1qXlE04NfumQTfSmrQe";
+    const CHUTES_API_KEY = process.env.CHUTES_API_KEY || '';
+    if (!CHUTES_API_KEY) {
+      return NextResponse.json(
+        { error: "AI service is not configured" },
+        { status: 500 }
+      );
+    }
     const CHUTES_BASE_URL = "https://llm.chutes.ai/v1";
     const CHUTES_MODEL = "chutesai/Mistral-Small-3.1-24B-Instruct-2503";
 
