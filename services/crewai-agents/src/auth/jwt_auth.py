@@ -14,6 +14,7 @@ The JWT `sub` claim is the user id (uuid). `get_current_user` validates the
 signature + expiry and returns that user id.
 """
 import logging
+from urllib.parse import urlparse
 
 import jwt
 from fastapi import Depends, HTTPException, Security, status
@@ -55,6 +56,16 @@ def _get_jwks_client() -> PyJWKClient:
     return _jwks_client
 
 
+def _expected_audience() -> str | None:
+    """Better Auth stamps `aud` = the baseURL ORIGIN (e.g. https://app.example.com),
+    which equals the origin of BETTER_AUTH_JWKS_URL. Return that origin so PyJWT can
+    verify the audience. If it can't be derived, callers skip aud verification."""
+    parsed = urlparse(settings.BETTER_AUTH_JWKS_URL or "")
+    if parsed.scheme and parsed.netloc:
+        return f"{parsed.scheme}://{parsed.netloc}"
+    return None
+
+
 def verify_jwt(token: str) -> dict:
     """
     Verify a Better Auth JWT against the cached JWKS and return its claims.
@@ -63,11 +74,18 @@ def verify_jwt(token: str) -> dict:
     """
     try:
         signing_key = _get_jwks_client().get_signing_key_from_jwt(token)
+        # Better Auth sets `aud` to the baseURL origin; PyJWT verifies aud by default,
+        # so we MUST pass the expected audience (else every real token => 401).
+        audience = _expected_audience()
+        options = {"require": ["exp", "sub"], "verify_exp": True}
+        if audience is None:
+            options["verify_aud"] = False
         claims = jwt.decode(
             token,
             signing_key.key,
             algorithms=_ALLOWED_ALGORITHMS,
-            options={"require": ["exp", "sub"], "verify_exp": True},
+            audience=audience,
+            options=options,
         )
         return claims
     except HTTPException:
