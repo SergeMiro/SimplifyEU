@@ -23,8 +23,10 @@ services:
       - "8000:8000"
     environment:
       - ENVIRONMENT=production
-      - SUPABASE_URL=${SUPABASE_URL}
-      - SUPABASE_KEY=${SUPABASE_KEY}
+      # Postgres-native (Phase 7): reach the Supabase pooler via the host gateway.
+      - DATABASE_URL=${DATABASE_URL}
+      - BETTER_AUTH_JWKS_URL=${BETTER_AUTH_JWKS_URL}
+      - SERVICE_API_KEY=${SERVICE_API_KEY}
       - MISTRAL_API_KEY=${MISTRAL_API_KEY}
       - CHUTES_API_KEY=${CHUTES_API_KEY}
       - CHUTES_BASE_URL=${CHUTES_BASE_URL}
@@ -40,6 +42,8 @@ services:
       - SMTP_PASSWORD=${SMTP_PASSWORD}
       - SMTP_SENDER_EMAIL=${SMTP_SENDER_EMAIL}
       - SMTP_SENDER_NAME=${SMTP_SENDER_NAME}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - redis
     restart: unless-stopped
@@ -68,8 +72,10 @@ services:
     command: celery -A src.celery_app worker --loglevel=info --concurrency=4
     environment:
       - ENVIRONMENT=production
-      - SUPABASE_URL=${SUPABASE_URL}
-      - SUPABASE_KEY=${SUPABASE_KEY}
+      # Postgres-native (Phase 7): reach the Supabase pooler via the host gateway.
+      - DATABASE_URL=${DATABASE_URL}
+      - BETTER_AUTH_JWKS_URL=${BETTER_AUTH_JWKS_URL}
+      - SERVICE_API_KEY=${SERVICE_API_KEY}
       - MISTRAL_API_KEY=${MISTRAL_API_KEY}
       - CHUTES_API_KEY=${CHUTES_API_KEY}
       - LLM_PROVIDER=${LLM_PROVIDER:-mistral}
@@ -81,6 +87,8 @@ services:
       - SMTP_PASSWORD=${SMTP_PASSWORD}
       - SMTP_SENDER_EMAIL=${SMTP_SENDER_EMAIL}
       - SMTP_SENDER_NAME=${SMTP_SENDER_NAME}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - redis
     restart: unless-stopped

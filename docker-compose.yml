@@ -8,10 +8,14 @@ services:
     ports:
       - "8001:8000"
     environment:
-      - SUPABASE_URL=${SUPABASE_URL}
-      - SUPABASE_KEY=${SUPABASE_SERVICE_KEY}
+      # Postgres-native (Phase 7): reach the Supabase pooler via the host gateway.
+      - DATABASE_URL=${DATABASE_URL}
+      - BETTER_AUTH_JWKS_URL=${BETTER_AUTH_JWKS_URL}
+      - SERVICE_API_KEY=${SERVICE_API_KEY}
       - MISTRAL_API_KEY=${MISTRAL_API_KEY}
       - REDIS_URL=${REDIS_URL}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./services/subscription-analyzer:/app
 
@@ -23,13 +27,17 @@ services:
       - "8003:8000"
     environment:
       - ENVIRONMENT=${ENVIRONMENT:-development}
-      - SUPABASE_URL=${SUPABASE_URL}
-      - SUPABASE_KEY=${SUPABASE_SERVICE_KEY}
+      # Postgres-native (Phase 7): reach the Supabase pooler via the host gateway.
+      - DATABASE_URL=${DATABASE_URL}
+      - BETTER_AUTH_JWKS_URL=${BETTER_AUTH_JWKS_URL}
+      - SERVICE_API_KEY=${SERVICE_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - MISTRAL_API_KEY=${MISTRAL_API_KEY}
       - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID}
       - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}
       - TWILIO_WHATSAPP_FROM=${TWILIO_WHATSAPP_FROM}
       - REDIS_URL=${REDIS_URL}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./services/crewai-agents:/app

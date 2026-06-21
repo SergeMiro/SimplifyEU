@@ -17,8 +17,10 @@ services:
       dockerfile: Dockerfile
     environment:
       - ENVIRONMENT=production
-      - SUPABASE_URL=${SUPABASE_URL}
-      - SUPABASE_KEY=${SUPABASE_SERVICE_KEY}
+      # Postgres-native (Phase 7): reach the Supabase pooler via the host gateway.
+      - DATABASE_URL=${DATABASE_URL}
+      - BETTER_AUTH_JWKS_URL=${BETTER_AUTH_JWKS_URL}
+      - SERVICE_API_KEY=${SERVICE_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_BASE_URL=${OPENAI_BASE_URL}
       - LLM_PROVIDER=openai
@@ -26,6 +28,8 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - API_KEY_SALT=${API_KEY_SALT}
       - CORS_ORIGINS=${CORS_ORIGINS}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - web
     labels:
@@ -42,8 +46,10 @@ services:
       dockerfile: Dockerfile
     environment:
       - ENVIRONMENT=production
-      - SUPABASE_URL=${SUPABASE_URL}
-      - SUPABASE_KEY=${SUPABASE_SERVICE_KEY}
+      # Postgres-native (Phase 7): reach the Supabase pooler via the host gateway.
+      - DATABASE_URL=${DATABASE_URL}
+      - BETTER_AUTH_JWKS_URL=${BETTER_AUTH_JWKS_URL}
+      - SERVICE_API_KEY=${SERVICE_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_BASE_URL=${OPENAI_BASE_URL}
       - LLM_PROVIDER=openai
@@ -51,6 +57,8 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - API_KEY_SALT=${API_KEY_SALT}
       - CORS_ORIGINS=${CORS_ORIGINS}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - web
     labels:
@@ -67,10 +75,14 @@ services:
       dockerfile: Dockerfile
     environment:
       - ENVIRONMENT=production
-      - SUPABASE_URL=${SUPABASE_URL}
-      - SUPABASE_KEY=${SUPABASE_SERVICE_KEY}
+      # Postgres-native (Phase 7): reach the Supabase pooler via the host gateway.
+      - DATABASE_URL=${DATABASE_URL}
+      - BETTER_AUTH_JWKS_URL=${BETTER_AUTH_JWKS_URL}
+      - SERVICE_API_KEY=${SERVICE_API_KEY}
       - API_KEY_SALT=${API_KEY_SALT}
       - CORS_ORIGINS=${CORS_ORIGINS}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - web
     labels:
@@ -87,12 +99,16 @@ services:
       dockerfile: Dockerfile
     environment:
       - ENVIRONMENT=production
-      - SUPABASE_URL=${SUPABASE_URL}
-      - SUPABASE_KEY=${SUPABASE_SERVICE_KEY}
+      # Postgres-native (Phase 7): reach the Supabase pooler via the host gateway.
+      - DATABASE_URL=${DATABASE_URL}
+      - BETTER_AUTH_JWKS_URL=${BETTER_AUTH_JWKS_URL}
+      - SERVICE_API_KEY=${SERVICE_API_KEY}
       - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN:-xoxb-placeholder}
       - SLACK_SIGNING_SECRET=${SLACK_SIGNING_SECRET:-placeholder}
       - API_KEY_SALT=${API_KEY_SALT}
       - CORS_ORIGINS=${CORS_ORIGINS}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - web
     labels:
