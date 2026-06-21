@@ -5,7 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter }
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
-import { createClient } from "@/lib/supabase/client"
+import { authClient, getAuthToken } from "@/lib/auth-client"
 import {
   Bot,
   Calculator,
@@ -154,12 +154,13 @@ export default function AgentsPage() {
   const [notifications, setNotifications] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [expandedAgent, setExpandedAgent] = useState<string | null>(null)
-  const supabase = createClient()
 
   const getHeaders = async () => {
-    const { data: { session } } = await supabase.auth.getSession()
+    const { data: session } = await authClient.getSession()
     const accountId = session?.user?.id || "00000000-0000-0000-0000-000000000000"
+    const token = await getAuthToken()
     return {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       "X-API-Key": API_KEY,
       "X-Account-ID": accountId,
       "Content-Type": "application/json",

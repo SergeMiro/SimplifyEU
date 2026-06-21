@@ -2,7 +2,7 @@
  * SimplifyEU Drizzle schema (pg-core).
  *
  * Mirrors db/migrations/0001_app_schema.sql — the single source of truth for the
- * Phase 2 plain-PostgreSQL migration off Supabase. Keep the two in sync.
+ * Phase 2 plain-PostgreSQL schema. Keep the two in sync.
  *
  * Notes:
  *  - `users.id` is self-owned (defaultRandom) now; Better Auth linkage is Phase 3.

@@ -6,7 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { SubscriptionCard } from "@/components/subscription-card"
-import { createClient } from "@/lib/supabase/client"
+import { authClient, getAuthToken } from "@/lib/auth-client"
 import { toast } from "sonner"
 import { 
     ArrowLeft, 
@@ -36,16 +36,17 @@ export default function AnalysisResultPage() {
     const [showEmailModal, setShowEmailModal] = useState(false)
     const [emailAddress, setEmailAddress] = useState("")
     const [emailConfigured, setEmailConfigured] = useState(false)
-    const supabase = createClient()
 
     useEffect(() => {
         let interval: NodeJS.Timeout
 
         const fetchAnalysis = async () => {
             try {
-                const { data: { session } } = await supabase.auth.getSession()
+                const { data: session } = await authClient.getSession()
                 const accountId = session?.user?.id || "00000000-0000-0000-0000-000000000000"
+                const token = await getAuthToken()
                 const headers = {
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
                     "X-API-Key": API_KEY,
                     "X-Account-ID": accountId,
                     "X-User-ID": session?.user?.id || "anonymous",
@@ -87,11 +88,13 @@ export default function AnalysisResultPage() {
     const downloadReport = async () => {
         setDownloadingPdf(true)
         try {
-             const { data: { session } } = await supabase.auth.getSession()
+             const { data: session } = await authClient.getSession()
              const accountId = session?.user?.id || "00000000-0000-0000-0000-000000000000"
+             const token = await getAuthToken()
 
              const response = await fetch(`${API_URL}/analyses/${analysisId}/report`, {
                 headers: {
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
                     "X-API-Key": API_KEY,
                     "X-Account-ID": accountId,
                     "X-User-ID": session?.user?.id || "anonymous",
@@ -127,12 +130,14 @@ export default function AnalysisResultPage() {
 
         setSendingEmail(true)
         try {
-            const { data: { session } } = await supabase.auth.getSession()
+            const { data: session } = await authClient.getSession()
             const accountId = session?.user?.id || "00000000-0000-0000-0000-000000000000"
+            const token = await getAuthToken()
 
             const response = await fetch(`${API_URL}/analyses/${analysisId}/send-report`, {
                 method: "POST",
                 headers: {
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
                     "X-API-Key": API_KEY,
                     "X-Account-ID": accountId,
                     "X-User-ID": session?.user?.id || "anonymous",

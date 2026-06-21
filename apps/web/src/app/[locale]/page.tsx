@@ -112,8 +112,8 @@ export default function Home() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               <FeatureCard
                 icon={<Database className="h-8 w-8 text-emerald-500" />}
-                title="Supabase"
-                description="PostgreSQL database, real-time subscriptions, and secure authentication for your data."
+                title="PostgreSQL"
+                description="Robust PostgreSQL database with secure authentication for your data."
               />
               <FeatureCard
                 icon={<CreditCard className="h-8 w-8 text-indigo-500" />}

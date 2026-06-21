@@ -1,9 +1,8 @@
 /**
  * Drizzle database client for the SimplifyEU web app.
  *
- * Uses a node-postgres Pool against DATABASE_URL. This replaces the Supabase
- * client for direct DB access (Phase 3 migration off Supabase). Better Auth
- * talks to this `db` via the drizzle adapter (see src/lib/auth.ts).
+ * Uses a node-postgres Pool against DATABASE_URL for direct DB access. Better
+ * Auth talks to this `db` via the drizzle adapter (see src/lib/auth.ts).
  */
 
 import { drizzle } from "drizzle-orm/node-postgres";

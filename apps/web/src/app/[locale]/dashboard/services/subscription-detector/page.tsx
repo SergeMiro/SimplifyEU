@@ -6,7 +6,7 @@ import { useTheme } from "next-themes"
 import { FileUpload } from "@/components/file-upload"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { createClient } from "@/lib/supabase/client"
+import { authClient, getAuthToken } from "@/lib/auth-client"
 import { 
     Trash2, 
     Sparkles, 
@@ -21,7 +21,12 @@ import {
 import { toast } from "sonner"
 
 const API_URL = process.env.NEXT_PUBLIC_SUBSCRIPTION_SERVICE_URL || "http://localhost:8001/v1";
-const API_KEY = process.env.NEXT_PUBLIC_SUBSCRIPTION_API_KEY || "demo-key";
+// WARNING: NEXT_PUBLIC_ vars are exposed to the browser. Do NOT put secret API keys here.
+// TODO: Migrate API calls to a Next.js API route to keep keys server-side.
+const API_KEY = process.env.NEXT_PUBLIC_SUBSCRIPTION_API_KEY || "";
+if (!API_KEY && typeof window !== "undefined") {
+  console.warn("Subscription API key is not configured. Set NEXT_PUBLIC_SUBSCRIPTION_API_KEY in environment.");
+}
 
 export default function SubscriptionDetectorPage() {
   const router = useRouter()
@@ -30,7 +35,6 @@ export default function SubscriptionDetectorPage() {
   const [isDeleting, setIsDeleting] = useState<string | null>(null)
   const [analyses, setAnalyses] = useState<any[]>([])
   const [mounted, setMounted] = useState(false)
-  const supabase = createClient()
 
   useEffect(() => {
     setMounted(true)
@@ -38,10 +42,12 @@ export default function SubscriptionDetectorPage() {
   }, [])
 
   const getHeaders = async () => {
-    const { data: { session } } = await supabase.auth.getSession()
+    const { data: session } = await authClient.getSession()
     const accountId = session?.user?.id || "00000000-0000-0000-0000-000000000000";
+    const token = await getAuthToken()
 
     return {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       "X-API-Key": API_KEY,
       "X-Account-ID": accountId,
       "X-User-ID": session?.user?.id || "anonymous",

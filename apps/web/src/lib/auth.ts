@@ -1,5 +1,5 @@
 /**
- * Better Auth server configuration (Phase 3 — replaces Supabase Auth).
+ * Better Auth server configuration (Phase 3 — email/password auth).
  *
  * Email + password only for now. Google OAuth is intentionally deferred to
  * part 2 when provider keys arrive — see the `socialProviders` TODO below.
@@ -17,6 +17,7 @@
 
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { jwt } from "better-auth/plugins";
 
 import { db } from "@/db/client";
 import { users } from "@/db/schema";
@@ -36,6 +37,11 @@ export const auth = betterAuth({
       generateId: "uuid",
     },
   },
+  // JWT plugin: exposes /api/auth/token (mint a JWT for the current session) and
+  // /api/auth/jwks (public keys for verification). The web app sends this JWT as
+  // `Authorization: Bearer <jwt>` to the Python services. Needs a `jwks` table
+  // (see src/db/auth-schema.ts / db/migrations/0003_jwt.sql).
+  plugins: [jwt()],
   databaseHooks: {
     user: {
       create: {
