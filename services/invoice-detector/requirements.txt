@@ -3,8 +3,12 @@ fastapi==0.115.0
 uvicorn[standard]==0.30.6
 python-multipart==0.0.12
 
-# Supabase
-supabase==2.13.0
+# Database (plain Postgres via SQLAlchemy + psycopg 3)
+SQLAlchemy==2.0.51
+psycopg[binary]==3.2.3
+
+# Better Auth JWT verification (JWKS)
+PyJWT[crypto]==2.10.1
 
 # PDF processing
 PyPDF2==3.0.1
@@ -24,9 +28,6 @@ slowapi==0.1.9
 
 # Settings management
 pydantic-settings==2.7.1
-
-# Auth
-passlib[bcrypt]==1.7.4
 
 # Production server
 gunicorn==22.0.0

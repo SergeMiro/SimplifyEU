@@ -1,17 +1,14 @@
-"""
-API Key Authentication — copied from subscription-analyzer pattern.
-"""
 import logging
-from typing import Optional
+import secrets
 
-from fastapi import Security, Header, HTTPException, status
+from fastapi import Header, HTTPException, Security, status
 from fastapi.security.api_key import APIKeyHeader
 
 from ..config import settings
 
 logger = logging.getLogger(__name__)
 
-api_key_header = APIKeyHeader(name="X-API-Key", auto_error=True)
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
 async def get_current_account(
@@ -19,69 +16,51 @@ async def get_current_account(
     account_id: str = Header(..., alias="X-Account-ID"),
 ) -> str:
     """
-    Validate API key and return the account ID.
-    In development, accepts sk_test_* keys.
-    In production, validates against Supabase.
+    Validate the service X-API-Key and return the account_id (tenant scope).
+
+    The web app calls this service with a shared service key in X-API-Key and
+    the tenant id in X-Account-ID.
+
+    SECURITY NOTES:
+    - Test/demo keys are ONLY honored in non-production environments.
+    - The configured SERVICE_API_KEY is compared in constant time.
+    - API keys are NEVER logged.
     """
+    logger.debug("[AUTH] Service-key request for account: %s", account_id)
+
     if not api_key:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing API key",
+            detail="Missing API Key",
         )
 
     if not account_id:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing account ID",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing X-Account-ID header",
         )
 
-    # Development mode: accept test keys
-    if not settings.is_production and api_key.startswith("sk_test_"):
-        logger.debug(f"Dev mode: accepted test key for account {account_id}")
-        return account_id
+    is_test_key = api_key.startswith("sk_test_") or api_key == "demo-key"
 
-    # Production mode: reject test keys
-    if settings.is_production and api_key.startswith("sk_test_"):
-        logger.warning(f"BLOCKED: test key used in production for account {account_id}")
+    # Development/demo override - ONLY in non-production.
+    if not settings.is_production:
+        if is_test_key:
+            logger.warning("[AUTH] Test/demo key used - DEV MODE ONLY")
+            return account_id
+    elif is_test_key:
+        logger.warning("[AUTH] Test key rejected in production!")
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Test keys are not allowed in production",
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Test API keys are not allowed in production",
         )
 
-    # Validate against Supabase
-    try:
-        from passlib.hash import bcrypt
-        from ..db.client import supabase
+    # Validate against the configured service key (constant-time compare).
+    if not settings.SERVICE_API_KEY:
+        logger.error("[AUTH] SERVICE_API_KEY not configured")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid API Key")
 
-        result = (
-            supabase.table("api_keys")
-            .select("key_hash, is_active")
-            .eq("account_id", account_id)
-            .eq("is_active", True)
-            .execute()
-        )
+    if not secrets.compare_digest(api_key, settings.SERVICE_API_KEY):
+        logger.warning("[AUTH] Service API key validation failed")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid API Key")
 
-        if not result.data:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid API key",
-            )
-
-        for key_record in result.data:
-            stored_hash = key_record["key_hash"]
-            if bcrypt.verify(api_key, stored_hash):
-                return account_id
-
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid API key",
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Auth validation error: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Authentication service error",
-        )
+    return account_id

@@ -2,21 +2,32 @@
 Tests for API endpoints (using TestClient).
 """
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 from fastapi.testclient import TestClient
 
-# Mock supabase before importing the app
-with patch("src.db.client.create_client") as mock_create:
-    mock_supabase = MagicMock()
-    mock_create.return_value = mock_supabase
-    from src.main import app
+from src.main import app
+from src.db.session import get_db
 
 client = TestClient(app)
 
 HEADERS = {
     "X-API-Key": "sk_test_123",
     "X-Account-ID": "test-account-001",
+    "X-User-ID": "test-user-001",
 }
+
+
+def _override_db(session):
+    """Install a get_db override that yields the given (mock) session."""
+    def _dep():
+        yield session
+    app.dependency_overrides[get_db] = _dep
+
+
+@pytest.fixture(autouse=True)
+def _clear_overrides():
+    yield
+    app.dependency_overrides.clear()
 
 
 class TestHealthEndpoint:
@@ -39,15 +50,17 @@ class TestHealthEndpoint:
 class TestInvoicesAPI:
     """Test /v1/invoices endpoints."""
 
-    @patch("src.db.client.supabase")
-    def test_list_invoices(self, mock_sb):
-        mock_result = MagicMock()
-        mock_result.data = []
-        mock_result.count = 0
-        mock_sb.table.return_value.select.return_value.eq.return_value.order.return_value.range.return_value.execute.return_value = mock_result
+    def test_list_invoices(self):
+        session = MagicMock()
+        session.scalar.return_value = 0
+        session.scalars.return_value.all.return_value = []
+        _override_db(session)
 
         response = client.get("/v1/invoices", headers=HEADERS)
         assert response.status_code == 200
+        data = response.json()
+        assert data["data"] == []
+        assert data["total"] == 0
 
     def test_upload_no_file(self):
         response = client.post("/v1/invoices/upload", headers=HEADERS)
@@ -57,15 +70,17 @@ class TestInvoicesAPI:
 class TestDuplicatesAPI:
     """Test /v1/duplicates endpoints."""
 
-    @patch("src.db.client.supabase")
-    def test_list_duplicates(self, mock_sb):
-        mock_result = MagicMock()
-        mock_result.data = []
-        mock_result.count = 0
-        mock_sb.table.return_value.select.return_value.eq.return_value.order.return_value.range.return_value.execute.return_value = mock_result
+    def test_list_duplicates(self):
+        session = MagicMock()
+        session.scalar.return_value = 0
+        session.scalars.return_value.all.return_value = []
+        _override_db(session)
 
         response = client.get("/v1/duplicates", headers=HEADERS)
         assert response.status_code == 200
+        data = response.json()
+        assert data["data"] == []
+        assert data["total"] == 0
 
 
 class TestAuthSecurity:

@@ -1,11 +1,12 @@
 import os
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from .api.v1 import invoices, duplicates
+from .auth.jwt_auth import require_jwt
 from .utils.logger import setup_logger
 
 logger = setup_logger("invoice-detector")
@@ -42,11 +43,18 @@ app.add_middleware(
     allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-Account-ID"],
+    allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-Account-ID", "X-User-ID"],
 )
 
-app.include_router(invoices.router, prefix="/v1", tags=["invoices"])
-app.include_router(duplicates.router, prefix="/v1", tags=["duplicates"])
+# require_jwt enforces the Better Auth Bearer JWT on every /v1 route (with a
+# dev/test-key bypass in non-production); get_current_account inside each route
+# still provides the account/tenant scope.
+app.include_router(
+    invoices.router, prefix="/v1", tags=["invoices"], dependencies=[Depends(require_jwt)]
+)
+app.include_router(
+    duplicates.router, prefix="/v1", tags=["duplicates"], dependencies=[Depends(require_jwt)]
+)
 
 
 @app.get("/health")

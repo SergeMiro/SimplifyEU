@@ -19,9 +19,12 @@ class Settings(BaseSettings):
     # ── CORS ─────────────────────────────────────
     CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
 
-    # ── Supabase ─────────────────────────────────
-    SUPABASE_URL: str = "https://placeholder.supabase.co"
-    SUPABASE_KEY: str = "placeholder-key"
+    # ── Database (plain Postgres via SQLAlchemy + psycopg 3) ──
+    DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/simplifyeu_db"
+
+    # ── Better Auth JWT verification (web app JWKS endpoint) ──
+    BETTER_AUTH_JWKS_URL: str | None = None
+    JWKS_CACHE_SECONDS: int = 300
 
     # ── File Upload ──────────────────────────────
     MAX_FILE_SIZE_MB: int = 50
@@ -43,7 +46,8 @@ class Settings(BaseSettings):
     DUPLICATE_THRESHOLD: float = 0.85
 
     # ── Security ─────────────────────────────────
-    API_KEY_SALT: str = "invoice-detector-salt"
+    # Shared service key the web app sends in X-API-Key.
+    SERVICE_API_KEY: str | None = None
 
     @property
     def is_production(self) -> bool:
@@ -66,8 +70,9 @@ settings = Settings()
 
 # Production safety checks
 if settings.is_production:
-    if settings.SUPABASE_URL == "https://placeholder.supabase.co":
-        raise ValueError("SUPABASE_URL must be set in production!")
-    if settings.API_KEY_SALT == "invoice-detector-salt":
-        import warnings
-        warnings.warn("API_KEY_SALT uses default value in production!")
+    import warnings
+
+    if not settings.SERVICE_API_KEY:
+        warnings.warn("SERVICE_API_KEY not set in production!", UserWarning)
+    if not settings.BETTER_AUTH_JWKS_URL:
+        warnings.warn("BETTER_AUTH_JWKS_URL not set in production!", UserWarning)
