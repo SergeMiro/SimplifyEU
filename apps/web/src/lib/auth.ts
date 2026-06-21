@@ -1,9 +1,8 @@
 /**
  * Better Auth server configuration (Phase 3 — replaces Supabase Auth).
  *
- * Email + password only for now. OAuth (Google / Apple) is intentionally
- * deferred to part 2 when provider keys arrive — see the `socialProviders`
- * TODO below.
+ * Email + password only for now. Google OAuth is intentionally deferred to
+ * part 2 when provider keys arrive — see the `socialProviders` TODO below.
  *
  * IDs: user.id (and session/account/verification ids) are UUIDs so they match
  * the existing `uuid` foreign keys across the app schema. This is configured via
@@ -55,9 +54,8 @@ export const auth = betterAuth({
       },
     },
   },
-  // TODO (part 2): add social providers once Google / Apple keys arrive, e.g.
+  // TODO (part 2): add the Google social provider once OAuth keys arrive, e.g.
   //   socialProviders: {
   //     google: { clientId: ..., clientSecret: ... },
-  //     apple:  { clientId: ..., clientSecret: ... },
   //   }
 });

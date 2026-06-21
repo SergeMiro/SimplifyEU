@@ -4,7 +4,7 @@ import React from "react";
 
 interface SocialButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   icon: React.ReactNode;
-  provider: "google" | "apple";
+  provider: "google";
 }
 
 export function SocialButton({ className, icon, provider, ...props }: SocialButtonProps) {

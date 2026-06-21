@@ -49,12 +49,6 @@ export default function LoginPage() {
     toast.info("Google sign-in is coming soon");
   };
 
-  // TODO (part 2): wire to signIn.social({ provider: "apple" }) once OAuth
-  // provider keys are configured in src/lib/auth.ts.
-  const handleAppleLogin = () => {
-    toast.info("Apple sign-in is coming soon");
-  };
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-muted/50 px-4">
       <Card className="w-full max-w-md">
@@ -192,17 +186,6 @@ export default function LoginPage() {
                       fill="currentColor"
                       d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                     />
-                  </svg>
-                }
-              />
-              <SocialButton
-                provider="apple"
-                onClick={handleAppleLogin}
-                disabled={loading}
-                icon={
-                  <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-.98-.42-2.32-.46-3.23-.02-1.2.55-2.1.25-3.1-.92-1.9-2.2-2.45-5.6-.45-7.98 1.15-1.35 3.03-1.6 4.08-.82.6.45 1.48.55 2.22-.05.9-.7 2.65-.85 3.55.35.5.08 1.35.6 1.83 1.3-.92.85-1.4 2.8-.25 4.3 1.25 1.6 1.1 2.95 2.05 4.05.5 1 .6 1.7.55 2.45-.65-1-1.35.6-2.1l-.85.9c-.35.4-.75.65-1.15.65zm-2.8-13.8c.85-1.3 2.15-1.85 3.55-1.85-.05 1.4-1.35 2.7-2.6 3.25-1.2.6-2.5 0-3.1-1.6.8-1.05 1.3-1.6 2.15-1.85z" />
-                    <path d="M21.9 16.55c-.25-1.5-1.3-2.6-2.8-3.3-1.55-.75-3.3-1.25-5.05-1.5-1.75-.25-3.55-.25-5.3-.25-1.75 0-3.5 0-5.25.25-1.75.25-3.5.75-5.05 1.5-1.5.75-2.55 1.8-2.8 3.3-.25 1.5-.25 3.05-.25 4.6 0 1.55 0 3.1.25 4.6.25 1.5 1.3 2.6 2.8 3.3 1.55.75 3.3 1.25 5.05 1.5 1.75.25 3.5.25 5.3.25 1.75 0 3.5 0 5.25-.25 1.75-.25 3.5-.75 5.05-1.5 1.5-.75 2.55-1.8 2.8-3.3.25-1.5.25-3.05.25-4.6 0-1.55 0-3.1-.25-4.6zM12 21.05c-4.95 0-9.05-4.1-9.05-9.05 0-4.95 4.1-9.05 9.05-9.05 4.95 0 9.05 4.1 9.05 9.05 0 4.95-4.1 9.05-9.05 9.05z" className="opacity-0" />
                   </svg>
                 }
               />

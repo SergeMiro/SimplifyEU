@@ -7,7 +7,7 @@ import { NextResponse } from "next/server";
  * Auth handles the whole email/password flow under /api/auth/*. This is kept as
  * a clean no-op redirect so any stale links don't 404.
  *
- * TODO (part 2): when Google / Apple OAuth is added, Better Auth's social flow
+ * TODO (part 2): when Google OAuth is added, Better Auth's social flow
  * uses its own callback at /api/auth/callback/<provider>, so this route can
  * either be removed or repurposed for a post-login landing redirect.
  */
