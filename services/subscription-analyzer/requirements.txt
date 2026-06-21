@@ -2,7 +2,14 @@ fastapi>=0.100.0
 uvicorn>=0.23.0
 pydantic[email]>=2.0.0
 pydantic-settings>=2.0.0
-supabase>=2.0.0
+
+# Database (plain Postgres via SQLAlchemy + psycopg 3)
+SQLAlchemy>=2.0.0
+psycopg[binary]>=3.2.0
+
+# Better Auth JWT verification (JWKS)
+PyJWT[crypto]>=2.10.0
+
 pandas>=2.0.0
 httpx>=0.24.0
 python-multipart>=0.0.6
@@ -10,7 +17,6 @@ reportlab>=4.0.0
 python-dotenv>=1.0.0
 pytest>=7.0.0
 pytest-asyncio>=0.21.0
-passlib[bcrypt]>=1.7.4
 openpyxl>=3.1.0
 
 # Security & Rate Limiting

@@ -2,17 +2,22 @@ from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Backgro
 from typing import List, Optional
 from uuid import UUID
 from pydantic import BaseModel, EmailStr
+import os
 import uuid
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 import io
 import httpx
 
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
 from ...auth.api_key import get_current_account
-from ...db.client import supabase
+from ...config import settings
+from ...db.session import SessionLocal, get_db
+from ...db.orm import Analysis as AnalysisRow, AnalysisItem as AnalysisItemRow
 from ...db.models import Analysis, AnalysisItem
 from ...core.csv_parser import parse_csv
 from ...core.pdf_parser import parse_pdf, is_pdf_supported, PDFParseError
@@ -35,10 +40,60 @@ class SendReportRequest(BaseModel):
 router = APIRouter()
 
 
+def _analysis_to_dict(a: AnalysisRow) -> dict:
+    """Serialize an Analysis row to a JSON-friendly dict (full record)."""
+    return {
+        "id": str(a.id),
+        "account_id": str(a.account_id),
+        "user_id": str(a.user_id),
+        "status": a.status,
+        "source_type": a.source_type,
+        "filename": a.filename,
+        "file_url": a.file_url,
+        "total_transactions": a.total_transactions,
+        "subscriptions_found": a.subscriptions_found,
+        "potential_savings_eur": float(a.potential_savings_eur) if a.potential_savings_eur is not None else 0,
+        "report_url": a.report_url,
+        "error_message": a.error_message,
+        "started_at": a.started_at.isoformat() if a.started_at else None,
+        "completed_at": a.completed_at.isoformat() if a.completed_at else None,
+        "created_at": a.created_at.isoformat() if a.created_at else None,
+        "updated_at": a.updated_at.isoformat() if a.updated_at else None,
+    }
+
+
+def _item_to_dict(i: AnalysisItemRow) -> dict:
+    """Serialize an AnalysisItem row to a JSON-friendly dict."""
+    return {
+        "id": str(i.id),
+        "analysis_id": str(i.analysis_id),
+        "merchant_descriptor": i.merchant_descriptor,
+        "merchant_name": i.merchant_name,
+        "category": i.category,
+        "amount_avg": float(i.amount_avg) if i.amount_avg is not None else None,
+        "amount_min": float(i.amount_min) if i.amount_min is not None else None,
+        "amount_max": float(i.amount_max) if i.amount_max is not None else None,
+        "currency": i.currency,
+        "frequency": i.frequency,
+        "occurrences": i.occurrences,
+        "first_seen": i.first_seen.isoformat() if i.first_seen else None,
+        "last_seen": i.last_seen.isoformat() if i.last_seen else None,
+        "confidence_score": float(i.confidence_score) if i.confidence_score is not None else None,
+        "is_subscription": i.is_subscription,
+        "tags": i.tags if i.tags is not None else [],
+        "recommendation": i.recommendation,
+        "created_at": i.created_at.isoformat() if i.created_at else None,
+    }
+
+
 async def run_analysis_task(analysis_id: str, account_id: str, file_content: bytes, source_type: str = "csv"):
     try:
         # Update status
-        supabase.table("analyses").update({"status": "processing"}).eq("id", analysis_id).execute()
+        with SessionLocal() as session:
+            analysis = session.get(AnalysisRow, UUID(analysis_id))
+            if analysis:
+                analysis.status = "processing"
+                session.commit()
 
         # Parse based on source type
         if source_type == "pdf":
@@ -53,16 +108,11 @@ async def run_analysis_task(analysis_id: str, account_id: str, file_content: byt
         items = await detect_subscriptions(transactions, UUID(analysis_id))
 
         # Save Items
-        items_data = []
-        for item in items:
-            data = item.model_dump(exclude={"id", "created_at"})
-            data['analysis_id'] = str(data['analysis_id'])
-            data['first_seen'] = data['first_seen'].isoformat()
-            data['last_seen'] = data['last_seen'].isoformat()
-            items_data.append(data)
-
-        if items_data:
-            supabase.table("analysis_items").insert(items_data).execute()
+        with SessionLocal() as session:
+            for item in items:
+                data = item.model_dump(exclude={"id", "created_at"})
+                session.add(AnalysisItemRow(**data))
+            session.commit()
 
         # Calc stats
         total_tx = len(transactions)
@@ -70,26 +120,31 @@ async def run_analysis_task(analysis_id: str, account_id: str, file_content: byt
         savings = sum([i.amount_avg for i in items if i.is_subscription])
 
         # Update Analysis
-        supabase.table("analyses").update({
-            "status": "completed",
-            "total_transactions": total_tx,
-            "subscriptions_found": subs_found,
-            "potential_savings_eur": savings,
-            "completed_at": datetime.now().isoformat()
-        }).eq("id", analysis_id).execute()
+        with SessionLocal() as session:
+            analysis = session.get(AnalysisRow, UUID(analysis_id))
+            if analysis:
+                analysis.status = "completed"
+                analysis.total_transactions = total_tx
+                analysis.subscriptions_found = subs_found
+                analysis.potential_savings_eur = savings
+                analysis.completed_at = datetime.now(timezone.utc)
+                session.commit()
 
     except Exception as e:
         print(f"Analysis failed: {e}")
-        supabase.table("analyses").update({
-            "status": "failed",
-            "error_message": str(e)
-        }).eq("id", analysis_id).execute()
+        with SessionLocal() as session:
+            analysis = session.get(AnalysisRow, UUID(analysis_id))
+            if analysis:
+                analysis.status = "failed"
+                analysis.error_message = str(e)
+                session.commit()
 
 @router.post("/analyses", status_code=201)
 async def create_analysis(
     file: UploadFile = File(...),
     account_id: str = Depends(get_current_account),
-    user_id: str = Header("anonymous", alias="X-User-ID")
+    user_id: str = Header("anonymous", alias="X-User-ID"),
+    db: Session = Depends(get_db),
 ):
     # Determine file type
     filename = file.filename.lower()
@@ -99,7 +154,7 @@ async def create_analysis(
         pdf_caps = is_pdf_supported()
         if not pdf_caps.get("text_extraction") and not pdf_caps.get("ocr_available"):
             raise HTTPException(
-                400, 
+                400,
                 "PDF support requires additional dependencies. Please use CSV format or contact support."
             )
     elif filename.endswith(('.csv', '.txt')):
@@ -111,32 +166,31 @@ async def create_analysis(
     if len(content) > 10 * 1024 * 1024:
         raise HTTPException(400, "File too large (max 10MB)")
 
-    # Upload to Supabase Storage (Private)
+    # Store the uploaded file locally (private). We store the relative path.
     file_path = f"{account_id}/{uuid.uuid4()}_{file.filename}"
     try:
-        # Upload
-        res = supabase.storage.from_("uploads").upload(file_path, content)
-        # We DO NOT generate public URL for privacy.
-        # We store the path.
+        abs_path = os.path.join(settings.UPLOAD_DIR, file_path)
+        os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+        with open(abs_path, "wb") as f:
+            f.write(content)
+        # We DO NOT generate public URL for privacy. We store the path.
     except Exception as e:
         print(f"Storage upload error: {e}")
         raise HTTPException(500, "Failed to upload file")
 
     # Create Record
-    new_analysis = {
-        "account_id": account_id,
-        "user_id": user_id,
-        "status": "pending",
-        "filename": file.filename,
-        "file_url": file_path, # Storing path
-        "source_type": source_type
-    }
+    analysis = AnalysisRow(
+        account_id=UUID(account_id),
+        user_id=UUID(user_id),
+        status="pending",
+        filename=file.filename,
+        file_url=file_path,  # Storing path
+        source_type=source_type,
+    )
+    db.add(analysis)
+    db.commit()
 
-    res = supabase.table("analyses").insert(new_analysis).execute()
-    if not res.data:
-        raise HTTPException(500, "Failed to create analysis record")
-
-    analysis_id = res.data[0]['id']
+    analysis_id = str(analysis.id)
 
     return {"analysis_id": analysis_id, "status": "pending", "source_type": source_type}
 
@@ -144,21 +198,36 @@ async def create_analysis(
 async def run_analysis(
     analysis_id: str,
     background_tasks: BackgroundTasks,
-    account_id: str = Depends(get_current_account)
+    account_id: str = Depends(get_current_account),
+    db: Session = Depends(get_db),
 ):
     # Verify ownership
-    res = supabase.table("analyses").select("*").eq("id", analysis_id).eq("account_id", account_id).execute()
-    if not res.data:
+    analysis = db.scalars(
+        select(AnalysisRow).where(
+            AnalysisRow.id == UUID(analysis_id),
+            AnalysisRow.account_id == UUID(account_id),
+        )
+    ).first()
+    if not analysis:
         raise HTTPException(404, "Analysis not found")
 
-    analysis = res.data[0]
-    if analysis['status'] == 'processing':
+    if analysis.status == 'processing':
+        return {"status": "processing", "message": "Already running"}
+
+    # Atomic check-and-set: only update to 'processing' if still in expected state
+    # This prevents race conditions when multiple requests try to start the same analysis
+    update_count = db.query(AnalysisRow).filter(
+        AnalysisRow.id == UUID(analysis_id),
+        AnalysisRow.status.in_(["pending", "failed", "completed"]),
+    ).update({AnalysisRow.status: "processing"}, synchronize_session=False)
+    db.commit()
+    if not update_count:
         return {"status": "processing", "message": "Already running"}
 
     # Download file content
     content = None
     try:
-        path = analysis.get('file_url')
+        path = analysis.file_url
         if not path:
              raise HTTPException(400, "No file associated")
 
@@ -171,14 +240,16 @@ async def run_analysis(
                 else:
                     raise HTTPException(400, "Could not retrieve file content")
         else:
-            # Download from storage using path
-            content = supabase.storage.from_("uploads").download(path)
+            # Read from local storage using path
+            abs_path = os.path.join(settings.UPLOAD_DIR, path)
+            with open(abs_path, "rb") as f:
+                content = f.read()
 
     except Exception as e:
         print(f"Download error: {e}")
         raise HTTPException(400, "Could not retrieve file content")
 
-    source_type = analysis.get('source_type', 'csv')
+    source_type = analysis.source_type or 'csv'
     background_tasks.add_task(run_analysis_task, analysis_id, account_id, content, source_type)
 
     return {"status": "processing", "message": "Analysis started", "source_type": source_type}
@@ -186,65 +257,88 @@ async def run_analysis(
 @router.get("/analyses/{analysis_id}")
 async def get_analysis(
     analysis_id: str,
-    account_id: str = Depends(get_current_account)
+    account_id: str = Depends(get_current_account),
+    db: Session = Depends(get_db),
 ):
-    res = supabase.table("analyses").select("*").eq("id", analysis_id).eq("account_id", account_id).execute()
-    if not res.data:
+    analysis = db.scalars(
+        select(AnalysisRow).where(
+            AnalysisRow.id == UUID(analysis_id),
+            AnalysisRow.account_id == UUID(account_id),
+        )
+    ).first()
+    if not analysis:
         raise HTTPException(404, "Analysis not found")
 
-    analysis = res.data[0]
-
     # Get items
-    items_res = supabase.table("analysis_items").select("*").eq("analysis_id", analysis_id).execute()
-    items = items_res.data
+    items = db.scalars(
+        select(AnalysisItemRow).where(AnalysisItemRow.analysis_id == UUID(analysis_id))
+    ).all()
 
-    return {**analysis, "items": items}
+    return {**_analysis_to_dict(analysis), "items": [_item_to_dict(i) for i in items]}
 
 @router.get("/analyses")
 async def list_analyses(
     page: int = 1,
     limit: int = 20,
-    account_id: str = Depends(get_current_account)
+    account_id: str = Depends(get_current_account),
+    db: Session = Depends(get_db),
 ):
-    start = (page - 1) * limit
-    end = start + limit - 1
+    offset = (page - 1) * limit
 
-    res = supabase.table("analyses").select("*", count="exact")\
-        .eq("account_id", account_id)\
-        .order("created_at", desc=True)\
-        .range(start, end)\
-        .execute()
+    total = db.scalar(
+        select(func.count()).select_from(AnalysisRow).where(
+            AnalysisRow.account_id == UUID(account_id)
+        )
+    )
+
+    rows = db.scalars(
+        select(AnalysisRow)
+        .where(AnalysisRow.account_id == UUID(account_id))
+        .order_by(AnalysisRow.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    ).all()
 
     return {
-        "data": res.data,
-        "total": res.count,
+        "data": [_analysis_to_dict(r) for r in rows],
+        "total": total or 0,
         "page": page
     }
 
 @router.get("/analyses/{analysis_id}/report")
 async def get_report(
     analysis_id: str,
-    account_id: str = Depends(get_current_account)
+    account_id: str = Depends(get_current_account),
+    db: Session = Depends(get_db),
 ):
     # Fetch analysis and items
-    res = supabase.table("analyses").select("*").eq("id", analysis_id).eq("account_id", account_id).execute()
-    if not res.data:
+    analysis_row = db.scalars(
+        select(AnalysisRow).where(
+            AnalysisRow.id == UUID(analysis_id),
+            AnalysisRow.account_id == UUID(account_id),
+        )
+    ).first()
+    if not analysis_row:
         raise HTTPException(404, "Analysis not found")
 
-    analysis_data = res.data[0]
-    analysis = Analysis(**analysis_data)
+    analysis = Analysis(**_analysis_to_dict(analysis_row))
 
-    items_res = supabase.table("analysis_items").select("*").eq("analysis_id", analysis_id).execute()
-    items = [AnalysisItem(**i) for i in items_res.data]
+    item_rows = db.scalars(
+        select(AnalysisItemRow).where(AnalysisItemRow.analysis_id == UUID(analysis_id))
+    ).all()
+    items = [AnalysisItem(**_item_to_dict(i)) for i in item_rows]
 
     pdf_bytes = generate_pdf_report(analysis, items)
 
-    # Upload report to storage (Private)
+    # Store report locally (Private). Store path, not public URL.
     report_path = f"{account_id}/{analysis_id}.pdf"
     try:
-        supabase.storage.from_("reports").upload(report_path, pdf_bytes, file_options={"content-type": "application/pdf", "upsert": "true"})
-        # Store path, not public URL
-        supabase.table("analyses").update({"report_url": report_path}).eq("id", analysis_id).execute()
+        abs_report = os.path.join(settings.REPORTS_DIR, report_path)
+        os.makedirs(os.path.dirname(abs_report), exist_ok=True)
+        with open(abs_report, "wb") as f:
+            f.write(pdf_bytes)
+        analysis_row.report_url = report_path
+        db.commit()
     except Exception as e:
         print(f"Report upload error: {e}")
         # Continue to return bytes
@@ -258,11 +352,12 @@ async def get_report(
 async def send_report_email(
     analysis_id: str,
     request: SendReportRequest,
-    account_id: str = Depends(get_current_account)
+    account_id: str = Depends(get_current_account),
+    db: Session = Depends(get_db),
 ):
     """
     Send analysis report to specified email address.
-    
+
     - **email**: Recipient email address
     - **include_pdf**: Whether to attach PDF report (default: True)
     - **recipient_name**: Optional name for personalization
@@ -273,23 +368,28 @@ async def send_report_email(
             status_code=503,
             detail="Email service is not configured. Please set SMTP credentials."
         )
-    
+
     # Verify ownership and get analysis
-    res = supabase.table("analyses").select("*").eq("id", analysis_id).eq("account_id", account_id).execute()
-    if not res.data:
+    analysis_row = db.scalars(
+        select(AnalysisRow).where(
+            AnalysisRow.id == UUID(analysis_id),
+            AnalysisRow.account_id == UUID(account_id),
+        )
+    ).first()
+    if not analysis_row:
         raise HTTPException(404, "Analysis not found")
 
-    analysis_data = res.data[0]
-    
     # Check if analysis is completed
-    if analysis_data.get("status") != "completed":
+    if analysis_row.status != "completed":
         raise HTTPException(400, "Analysis must be completed before sending report")
-    
-    analysis = Analysis(**analysis_data)
+
+    analysis = Analysis(**_analysis_to_dict(analysis_row))
 
     # Get analysis items
-    items_res = supabase.table("analysis_items").select("*").eq("analysis_id", analysis_id).execute()
-    items = [AnalysisItem(**i) for i in items_res.data]
+    item_rows = db.scalars(
+        select(AnalysisItemRow).where(AnalysisItemRow.analysis_id == UUID(analysis_id))
+    ).all()
+    items = [AnalysisItem(**_item_to_dict(i)) for i in item_rows]
 
     # Generate PDF if requested
     pdf_bytes = None
@@ -330,30 +430,44 @@ async def get_email_status(
 @router.delete("/analyses/{analysis_id}")
 async def delete_analysis(
     analysis_id: str,
-    account_id: str = Depends(get_current_account)
+    account_id: str = Depends(get_current_account),
+    db: Session = Depends(get_db),
 ):
     # 1. Fetch analysis to get file paths
-    res = supabase.table("analyses").select("*").eq("id", analysis_id).eq("account_id", account_id).execute()
-    if not res.data:
+    analysis = db.scalars(
+        select(AnalysisRow).where(
+            AnalysisRow.id == UUID(analysis_id),
+            AnalysisRow.account_id == UUID(account_id),
+        )
+    ).first()
+    if not analysis:
         raise HTTPException(404, "Analysis not found")
-    
-    analysis = res.data[0]
+
+    file_url = analysis.file_url
+    report_url = analysis.report_url
 
     # 2. Delete related items
-    supabase.table("analysis_items").delete().eq("analysis_id", analysis_id).execute()
+    db.query(AnalysisItemRow).filter(
+        AnalysisItemRow.analysis_id == UUID(analysis_id)
+    ).delete(synchronize_session=False)
 
-    # 3. Delete files from Storage (Files & Reports)
+    # 3. Delete files from local storage (Files & Reports)
     try:
-        if analysis.get('file_url') and not analysis['file_url'].startswith('http'):
-            supabase.storage.from_("uploads").remove([analysis['file_url']])
-        
-        if analysis.get('report_url'):
-            supabase.storage.from_("reports").remove([analysis['report_url']])
+        if file_url and not file_url.startswith('http'):
+            abs_upload = os.path.join(settings.UPLOAD_DIR, file_url)
+            if os.path.exists(abs_upload):
+                os.remove(abs_upload)
+
+        if report_url:
+            abs_report = os.path.join(settings.REPORTS_DIR, report_url)
+            if os.path.exists(abs_report):
+                os.remove(abs_report)
     except Exception as e:
         print(f"Warning: Failed to cleanup storage files: {e}")
 
     # 4. Delete Analysis record
-    supabase.table("analyses").delete().eq("id", analysis_id).execute()
+    db.delete(analysis)
+    db.commit()
 
     return {"message": "Analysis deleted successfully"}
 
@@ -366,7 +480,7 @@ async def get_capabilities():
     """
     pdf_caps = is_pdf_supported()
     email_configured = email_service.is_configured()
-    
+
     return {
         "supported_formats": ["csv", "txt"] + (["pdf"] if pdf_caps.get("text_extraction") or pdf_caps.get("ocr_available") else []),
         "pdf_support": {
