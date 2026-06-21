@@ -24,9 +24,12 @@ class Settings(BaseSettings):
     # CORS - comma-separated list of allowed origins
     CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
 
-    # Supabase
-    SUPABASE_URL: str = "https://placeholder.supabase.co"
-    SUPABASE_KEY: str = "placeholder-key"
+    # Database (plain Postgres via SQLAlchemy)
+    DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/simplifyeu_db"
+
+    # Better Auth JWT verification (web app JWKS endpoint, e.g. http://web/api/auth/jwks)
+    BETTER_AUTH_JWKS_URL: str | None = None
+    JWKS_CACHE_SECONDS: int = 300
 
     # Slack Configuration
     SLACK_BOT_TOKEN: str | None = None
@@ -43,6 +46,8 @@ class Settings(BaseSettings):
 
     # Security
     API_KEY_SALT: str | None = None
+    # Shared service key the web app sends in X-API-Key.
+    SERVICE_API_KEY: str | None = None
 
     @property
     def is_production(self) -> bool:

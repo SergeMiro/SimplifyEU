@@ -2,15 +2,16 @@
 API Routes for Teams management.
 """
 import logging
-import uuid
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from ...auth.api_key import get_current_account
-from ...db.client import supabase
+from ...db.session import get_db
+from ...db.orm import Team
 from ...db.models import TeamCreate
 
 logger = logging.getLogger(__name__)
@@ -19,41 +20,40 @@ limiter = Limiter(key_func=get_remote_address)
 router = APIRouter()
 
 
+def _team_to_dict(team: Team) -> dict:
+    return {
+        "id": str(team.id),
+        "slack_team_id": team.slack_team_id,
+        "name": team.name,
+        "subscription_tier": team.subscription_tier,
+        "reminders_count": team.reminders_count,
+        "max_reminders": team.max_reminders,
+        "created_at": team.created_at.isoformat() if team.created_at else None,
+        "updated_at": team.updated_at.isoformat() if team.updated_at else None,
+    }
+
+
 @router.post("/teams", status_code=201)
 @limiter.limit("10/minute")
 async def create_team(
     request: Request,
     data: TeamCreate,
     account_id: str = Depends(get_current_account),
+    db: Session = Depends(get_db),
 ):
     """Register a new team / workspace."""
-    now = datetime.now(timezone.utc)
-    team_id = str(uuid.uuid4())
-
-    record = {
-        "id": team_id,
-        "slack_team_id": data.slack_team_id,
-        "name": data.name,
-        "subscription_tier": "free",
-        "reminders_count": 0,
-        "max_reminders": 50,
-        "created_at": now.isoformat(),
-        "updated_at": now.isoformat(),
-    }
-
     try:
-        # Check for existing team with same slack_team_id
-        existing = (
-            supabase.table("teams")
-            .select("id")
-            .eq("slack_team_id", data.slack_team_id)
-            .execute()
-        )
-        if existing.data:
+        existing = db.scalars(
+            select(Team).where(Team.slack_team_id == data.slack_team_id)
+        ).first()
+        if existing:
             raise HTTPException(status_code=409, detail="Team already registered")
 
-        res = supabase.table("teams").insert(record).execute()
-        return {"status": "ok", "data": res.data[0] if res.data else record}
+        team = Team(slack_team_id=data.slack_team_id, name=data.name)
+        db.add(team)
+        db.commit()
+        db.refresh(team)
+        return {"status": "ok", "data": _team_to_dict(team)}
     except HTTPException:
         raise
     except Exception as e:
@@ -67,18 +67,14 @@ async def get_team(
     request: Request,
     team_id: str,
     account_id: str = Depends(get_current_account),
+    db: Session = Depends(get_db),
 ):
     """Get team details."""
     try:
-        res = (
-            supabase.table("teams")
-            .select("*")
-            .eq("id", team_id)
-            .execute()
-        )
-        if not res.data:
+        team = db.get(Team, team_id)
+        if not team:
             raise HTTPException(status_code=404, detail="Team not found")
-        return {"status": "ok", "data": res.data[0]}
+        return {"status": "ok", "data": _team_to_dict(team)}
     except HTTPException:
         raise
     except Exception as e:

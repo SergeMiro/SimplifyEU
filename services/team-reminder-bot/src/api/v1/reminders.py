@@ -7,8 +7,12 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Header, Query, Request
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from sqlalchemy import select, func
+from sqlalchemy.orm import Session
 
 from ...auth.api_key import get_current_account
+from ...db.session import get_db
+from ...db.orm import Reminder
 from ...db.models import ReminderCreate, ReminderUpdate
 from ...core import reminder_scheduler
 from ...core.context_manager import log_event
@@ -173,22 +177,18 @@ async def trigger_queue_processing(
 async def get_stats(
     request: Request,
     account_id: str = Depends(get_current_account),
+    db: Session = Depends(get_db),
 ):
     """Get basic stats for the team."""
-    from ...core.context_manager import get_user_stats
-    from ...db.client import supabase
-
     try:
-        # Count reminders by status
-        res = (
-            supabase.table("reminders")
-            .select("status", count="exact")
-            .eq("team_id", account_id)
-            .execute()
-        )
+        rows = db.execute(
+            select(Reminder.status, func.count())
+            .where(Reminder.team_id == account_id)
+            .group_by(Reminder.status)
+        ).all()
 
         stats = {
-            "total": res.count or 0,
+            "total": 0,
             "pending": 0,
             "sent": 0,
             "completed": 0,
@@ -196,11 +196,10 @@ async def get_stats(
             "failed": 0,
         }
 
-        if res.data:
-            for r in res.data:
-                st = r.get("status", "")
-                if st in stats:
-                    stats[st] += 1
+        for status_value, count in rows:
+            stats["total"] += count
+            if status_value in stats:
+                stats[status_value] += count
 
         return {"status": "ok", "data": stats}
     except Exception as e:

@@ -8,10 +8,15 @@ In production, this would send via Slack API. For now, it logs + updates status.
 """
 import asyncio
 import logging
-from datetime import datetime, timezone
 
 from ..config import settings
-from .reminder_scheduler import get_due_reminders, mark_sent, mark_failed, create_next_recurring
+from .reminder_scheduler import (
+    get_due_reminders,
+    mark_sent,
+    mark_failed,
+    create_next_recurring,
+    increment_retry,
+)
 from .context_manager import enrich_reminder_message, log_event
 from .slack_formatter import format_reminder_message
 
@@ -78,11 +83,7 @@ async def process_due_reminders() -> int:
                     await mark_failed(reminder_id, "Max retries exceeded", new_retry_count)
                 else:
                     # Increment retry count for next poll
-                    from ..db.client import supabase
-                    supabase.table("reminders").update({
-                        "retry_count": new_retry_count,
-                        "updated_at": datetime.now(timezone.utc).isoformat(),
-                    }).eq("id", reminder_id).execute()
+                    await increment_retry(reminder_id, new_retry_count)
                     logger.warning(
                         f"[WORKER] Retry {new_retry_count}/{MAX_RETRIES} for reminder {reminder_id}"
                     )

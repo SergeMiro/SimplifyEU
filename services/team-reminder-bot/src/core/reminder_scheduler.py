@@ -1,16 +1,46 @@
 """
-Reminder Scheduler — CRUD operations for reminders in Supabase.
+Reminder Scheduler — CRUD operations for reminders via SQLAlchemy.
 """
 import logging
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List
 
-from ..db.client import supabase
-from ..db.models import Reminder, ReminderCreate, ReminderUpdate
+from sqlalchemy import select, func
+
+from ..db.session import SessionLocal
+from ..db.orm import Reminder
+from ..db.models import ReminderCreate, ReminderUpdate
 from .time_parser import parse_time, calculate_delay_seconds
 
 logger = logging.getLogger(__name__)
+
+
+def _to_dict(reminder: Reminder) -> dict:
+    """Serialize a Reminder ORM row to a plain dict (timestamps as ISO strings)."""
+    return {
+        "id": str(reminder.id),
+        "team_id": str(reminder.team_id),
+        "creator_user_id": reminder.creator_user_id,
+        "target_user_id": reminder.target_user_id,
+        "task_text": reminder.task_text,
+        "context": reminder.context,
+        "project": reminder.project,
+        "priority": reminder.priority,
+        "remind_at": reminder.remind_at.isoformat() if reminder.remind_at else None,
+        "status": reminder.status,
+        "repeat": reminder.repeat,
+        "parent_reminder_id": str(reminder.parent_reminder_id)
+        if reminder.parent_reminder_id
+        else None,
+        "sent_at": reminder.sent_at.isoformat() if reminder.sent_at else None,
+        "completed_at": reminder.completed_at.isoformat() if reminder.completed_at else None,
+        "snooze_count": reminder.snooze_count,
+        "retry_count": reminder.retry_count,
+        "error_message": reminder.error_message,
+        "created_at": reminder.created_at.isoformat() if reminder.created_at else None,
+        "updated_at": reminder.updated_at.isoformat() if reminder.updated_at else None,
+    }
 
 
 async def create_reminder(
@@ -46,30 +76,30 @@ async def create_reminder(
     if remind_at <= now:
         raise ValueError("Reminder time must be in the future")
 
-    reminder_id = str(uuid.uuid4())
-
-    record = {
-        "id": reminder_id,
-        "team_id": team_id,
-        "creator_user_id": creator_user_id,
-        "target_user_id": data.target_user_id,
-        "task_text": data.task_text,
-        "context": data.context,
-        "project": data.project,
-        "priority": data.priority,
-        "remind_at": remind_at.isoformat(),
-        "status": "pending",
-        "repeat": data.repeat,
-        "snooze_count": 0,
-        "retry_count": 0,
-        "created_at": now.isoformat(),
-        "updated_at": now.isoformat(),
-    }
+    reminder = Reminder(
+        team_id=uuid.UUID(team_id),
+        creator_user_id=creator_user_id,
+        target_user_id=data.target_user_id,
+        task_text=data.task_text,
+        context=data.context,
+        project=data.project,
+        priority=data.priority,
+        remind_at=remind_at,
+        status="pending",
+        repeat=data.repeat,
+        snooze_count=0,
+        retry_count=0,
+    )
 
     try:
-        res = supabase.table("reminders").insert(record).execute()
-        logger.info(f"[SCHEDULER] Created reminder {reminder_id} for user {data.target_user_id}")
-        return res.data[0] if res.data else record
+        with SessionLocal() as session:
+            session.add(reminder)
+            session.commit()
+            session.refresh(reminder)
+            logger.info(
+                f"[SCHEDULER] Created reminder {reminder.id} for user {data.target_user_id}"
+            )
+            return _to_dict(reminder)
     except Exception as e:
         logger.error(f"[SCHEDULER] Failed to create reminder: {e}")
         raise
@@ -78,14 +108,13 @@ async def create_reminder(
 async def get_reminder(reminder_id: str, team_id: str) -> Optional[dict]:
     """Get a single reminder by ID, scoped to team."""
     try:
-        res = (
-            supabase.table("reminders")
-            .select("*")
-            .eq("id", reminder_id)
-            .eq("team_id", team_id)
-            .execute()
-        )
-        return res.data[0] if res.data else None
+        with SessionLocal() as session:
+            stmt = select(Reminder).where(
+                Reminder.id == uuid.UUID(reminder_id),
+                Reminder.team_id == uuid.UUID(team_id),
+            )
+            reminder = session.scalars(stmt).first()
+            return _to_dict(reminder) if reminder else None
     except Exception as e:
         logger.error(f"[SCHEDULER] Failed to get reminder {reminder_id}: {e}")
         raise
@@ -100,24 +129,33 @@ async def list_reminders(
 ) -> dict:
     """List reminders with pagination and filters."""
     try:
-        query = supabase.table("reminders").select("*", count="exact").eq("team_id", team_id)
+        with SessionLocal() as session:
+            filters = [Reminder.team_id == uuid.UUID(team_id)]
+            if status:
+                filters.append(Reminder.status == status)
+            if target_user_id:
+                filters.append(Reminder.target_user_id == target_user_id)
 
-        if status:
-            query = query.eq("status", status)
-        if target_user_id:
-            query = query.eq("target_user_id", target_user_id)
+            total = session.scalar(
+                select(func.count()).select_from(Reminder).where(*filters)
+            ) or 0
 
-        offset = (page - 1) * limit
-        query = query.order("remind_at", desc=False).range(offset, offset + limit - 1)
+            offset = (page - 1) * limit
+            stmt = (
+                select(Reminder)
+                .where(*filters)
+                .order_by(Reminder.remind_at.asc())
+                .offset(offset)
+                .limit(limit)
+            )
+            rows = session.scalars(stmt).all()
 
-        res = query.execute()
-
-        return {
-            "data": res.data or [],
-            "total": res.count or 0,
-            "page": page,
-            "limit": limit,
-        }
+            return {
+                "data": [_to_dict(r) for r in rows],
+                "total": total,
+                "page": page,
+                "limit": limit,
+            }
     except Exception as e:
         logger.error(f"[SCHEDULER] Failed to list reminders: {e}")
         raise
@@ -129,20 +167,24 @@ async def update_reminder(reminder_id: str, team_id: str, data: ReminderUpdate) 
     if not update_data:
         return await get_reminder(reminder_id, team_id)
 
-    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
-
     try:
-        res = (
-            supabase.table("reminders")
-            .update(update_data)
-            .eq("id", reminder_id)
-            .eq("team_id", team_id)
-            .execute()
-        )
-        if res.data:
+        with SessionLocal() as session:
+            stmt = select(Reminder).where(
+                Reminder.id == uuid.UUID(reminder_id),
+                Reminder.team_id == uuid.UUID(team_id),
+            )
+            reminder = session.scalars(stmt).first()
+            if not reminder:
+                return None
+
+            for field, value in update_data.items():
+                setattr(reminder, field, value)
+            reminder.updated_at = datetime.now(timezone.utc)
+
+            session.commit()
+            session.refresh(reminder)
             logger.info(f"[SCHEDULER] Updated reminder {reminder_id}")
-            return res.data[0]
-        return None
+            return _to_dict(reminder)
     except Exception as e:
         logger.error(f"[SCHEDULER] Failed to update reminder {reminder_id}: {e}")
         raise
@@ -151,17 +193,19 @@ async def update_reminder(reminder_id: str, team_id: str, data: ReminderUpdate) 
 async def delete_reminder(reminder_id: str, team_id: str) -> bool:
     """Delete a reminder."""
     try:
-        res = (
-            supabase.table("reminders")
-            .delete()
-            .eq("id", reminder_id)
-            .eq("team_id", team_id)
-            .execute()
-        )
-        deleted = bool(res.data)
-        if deleted:
+        with SessionLocal() as session:
+            stmt = select(Reminder).where(
+                Reminder.id == uuid.UUID(reminder_id),
+                Reminder.team_id == uuid.UUID(team_id),
+            )
+            reminder = session.scalars(stmt).first()
+            if not reminder:
+                return False
+
+            session.delete(reminder)
+            session.commit()
             logger.info(f"[SCHEDULER] Deleted reminder {reminder_id}")
-        return deleted
+            return True
     except Exception as e:
         logger.error(f"[SCHEDULER] Failed to delete reminder {reminder_id}: {e}")
         raise
@@ -173,32 +217,28 @@ async def snooze_reminder(
     snooze_minutes: int = 15
 ) -> Optional[dict]:
     """Snooze a reminder by N minutes."""
-    reminder = await get_reminder(reminder_id, team_id)
-    if not reminder:
-        return None
-
     now = datetime.now(timezone.utc)
     new_remind_at = now + timedelta(minutes=snooze_minutes)
 
-    update_data = {
-        "remind_at": new_remind_at.isoformat(),
-        "status": "pending",
-        "snooze_count": reminder.get("snooze_count", 0) + 1,
-        "updated_at": now.isoformat(),
-    }
-
     try:
-        res = (
-            supabase.table("reminders")
-            .update(update_data)
-            .eq("id", reminder_id)
-            .eq("team_id", team_id)
-            .execute()
-        )
-        if res.data:
+        with SessionLocal() as session:
+            stmt = select(Reminder).where(
+                Reminder.id == uuid.UUID(reminder_id),
+                Reminder.team_id == uuid.UUID(team_id),
+            )
+            reminder = session.scalars(stmt).first()
+            if not reminder:
+                return None
+
+            reminder.remind_at = new_remind_at
+            reminder.status = "pending"
+            reminder.snooze_count = (reminder.snooze_count or 0) + 1
+            reminder.updated_at = now
+
+            session.commit()
+            session.refresh(reminder)
             logger.info(f"[SCHEDULER] Snoozed reminder {reminder_id} for {snooze_minutes} min")
-            return res.data[0]
-        return None
+            return _to_dict(reminder)
     except Exception as e:
         logger.error(f"[SCHEDULER] Failed to snooze reminder {reminder_id}: {e}")
         raise
@@ -208,16 +248,15 @@ async def get_due_reminders(limit: int = 50) -> List[dict]:
     """Get reminders that are due for sending (remind_at <= now, status = pending)."""
     now = datetime.now(timezone.utc)
     try:
-        res = (
-            supabase.table("reminders")
-            .select("*")
-            .eq("status", "pending")
-            .lte("remind_at", now.isoformat())
-            .order("remind_at", desc=False)
-            .limit(limit)
-            .execute()
-        )
-        return res.data or []
+        with SessionLocal() as session:
+            stmt = (
+                select(Reminder)
+                .where(Reminder.status == "pending", Reminder.remind_at <= now)
+                .order_by(Reminder.remind_at.asc())
+                .limit(limit)
+            )
+            rows = session.scalars(stmt).all()
+            return [_to_dict(r) for r in rows]
     except Exception as e:
         logger.error(f"[SCHEDULER] Failed to get due reminders: {e}")
         raise
@@ -227,11 +266,13 @@ async def mark_sent(reminder_id: str) -> None:
     """Mark a reminder as sent."""
     now = datetime.now(timezone.utc)
     try:
-        supabase.table("reminders").update({
-            "status": "sent",
-            "sent_at": now.isoformat(),
-            "updated_at": now.isoformat(),
-        }).eq("id", reminder_id).execute()
+        with SessionLocal() as session:
+            reminder = session.get(Reminder, uuid.UUID(reminder_id))
+            if reminder:
+                reminder.status = "sent"
+                reminder.sent_at = now
+                reminder.updated_at = now
+                session.commit()
         logger.info(f"[SCHEDULER] Marked reminder {reminder_id} as sent")
     except Exception as e:
         logger.error(f"[SCHEDULER] Failed to mark sent {reminder_id}: {e}")
@@ -242,15 +283,32 @@ async def mark_failed(reminder_id: str, error: str, retry_count: int) -> None:
     """Mark a reminder as failed after exhausting retries."""
     now = datetime.now(timezone.utc)
     try:
-        supabase.table("reminders").update({
-            "status": "failed",
-            "error_message": error,
-            "retry_count": retry_count,
-            "updated_at": now.isoformat(),
-        }).eq("id", reminder_id).execute()
+        with SessionLocal() as session:
+            reminder = session.get(Reminder, uuid.UUID(reminder_id))
+            if reminder:
+                reminder.status = "failed"
+                reminder.error_message = error
+                reminder.retry_count = retry_count
+                reminder.updated_at = now
+                session.commit()
         logger.warning(f"[SCHEDULER] Marked reminder {reminder_id} as failed: {error}")
     except Exception as e:
         logger.error(f"[SCHEDULER] Failed to mark failed {reminder_id}: {e}")
+        raise
+
+
+async def increment_retry(reminder_id: str, retry_count: int) -> None:
+    """Persist an incremented retry counter for a reminder."""
+    now = datetime.now(timezone.utc)
+    try:
+        with SessionLocal() as session:
+            reminder = session.get(Reminder, uuid.UUID(reminder_id))
+            if reminder:
+                reminder.retry_count = retry_count
+                reminder.updated_at = now
+                session.commit()
+    except Exception as e:
+        logger.error(f"[SCHEDULER] Failed to increment retry {reminder_id}: {e}")
         raise
 
 
@@ -285,30 +343,31 @@ async def create_next_recurring(reminder: dict) -> Optional[dict]:
     while next_remind_at <= now:
         next_remind_at += delta
 
-    next_id = str(uuid.uuid4())
-    record = {
-        "id": next_id,
-        "team_id": reminder["team_id"],
-        "creator_user_id": reminder["creator_user_id"],
-        "target_user_id": reminder["target_user_id"],
-        "task_text": reminder["task_text"],
-        "context": reminder.get("context"),
-        "project": reminder.get("project"),
-        "priority": reminder.get("priority", "medium"),
-        "remind_at": next_remind_at.isoformat(),
-        "status": "pending",
-        "repeat": repeat,
-        "parent_reminder_id": reminder["id"],
-        "snooze_count": 0,
-        "retry_count": 0,
-        "created_at": now.isoformat(),
-        "updated_at": now.isoformat(),
-    }
+    new_reminder = Reminder(
+        team_id=uuid.UUID(reminder["team_id"]),
+        creator_user_id=reminder["creator_user_id"],
+        target_user_id=reminder["target_user_id"],
+        task_text=reminder["task_text"],
+        context=reminder.get("context"),
+        project=reminder.get("project"),
+        priority=reminder.get("priority", "medium"),
+        remind_at=next_remind_at,
+        status="pending",
+        repeat=repeat,
+        parent_reminder_id=uuid.UUID(reminder["id"]),
+        snooze_count=0,
+        retry_count=0,
+    )
 
     try:
-        res = supabase.table("reminders").insert(record).execute()
-        logger.info(f"[SCHEDULER] Created next recurring reminder {next_id} from {reminder['id']}")
-        return res.data[0] if res.data else record
+        with SessionLocal() as session:
+            session.add(new_reminder)
+            session.commit()
+            session.refresh(new_reminder)
+            logger.info(
+                f"[SCHEDULER] Created next recurring reminder {new_reminder.id} from {reminder['id']}"
+            )
+            return _to_dict(new_reminder)
     except Exception as e:
         logger.error(f"[SCHEDULER] Failed to create next recurring: {e}")
         raise

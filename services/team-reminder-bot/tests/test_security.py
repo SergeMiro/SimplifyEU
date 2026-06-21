@@ -2,14 +2,9 @@
 Security-focused tests for Team Reminder Bot.
 """
 import pytest
-from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
 
-# Mock supabase before importing the app
-with patch("src.db.client.create_client") as mock_create:
-    mock_supabase = MagicMock()
-    mock_create.return_value = mock_supabase
-    from src.main import app
+from src.main import app
 
 client = TestClient(app)
 

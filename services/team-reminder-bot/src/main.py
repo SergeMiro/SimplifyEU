@@ -1,11 +1,12 @@
 import os
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from .api.v1 import reminders, teams
+from .auth.jwt_auth import require_jwt
 from .utils.logger import setup_logger
 
 logger = setup_logger("team-reminder-bot")
@@ -45,8 +46,15 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-Account-ID", "X-User-ID"],
 )
 
-app.include_router(reminders.router, prefix="/v1", tags=["reminders"])
-app.include_router(teams.router, prefix="/v1", tags=["teams"])
+# require_jwt enforces the Better Auth Bearer JWT on every /v1 route (with a
+# dev/test-key bypass in non-production); get_current_account inside each route
+# still provides the account/team scope.
+app.include_router(
+    reminders.router, prefix="/v1", tags=["reminders"], dependencies=[Depends(require_jwt)]
+)
+app.include_router(
+    teams.router, prefix="/v1", tags=["teams"], dependencies=[Depends(require_jwt)]
+)
 
 
 @app.get("/health")

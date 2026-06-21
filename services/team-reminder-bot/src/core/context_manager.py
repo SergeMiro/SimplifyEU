@@ -8,10 +8,13 @@ Provides:
 """
 import logging
 import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from typing import Optional, List
 
-from ..db.client import supabase
+from sqlalchemy import select, func
+
+from ..db.session import SessionLocal
+from ..db.orm import ContextHistory, Reminder
 
 logger = logging.getLogger(__name__)
 
@@ -24,26 +27,42 @@ async def log_event(
     related_reminder_id: Optional[str] = None
 ) -> dict:
     """Log a context event for future reference."""
-    event_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
 
-    record = {
-        "id": event_id,
-        "team_id": team_id,
-        "user_id": user_id,
-        "event_type": event_type,
-        "event_data": event_data or {},
-        "related_reminder_id": related_reminder_id,
-        "created_at": now.isoformat(),
-    }
-
     try:
-        res = supabase.table("context_history").insert(record).execute()
-        return res.data[0] if res.data else record
+        event = ContextHistory(
+            team_id=uuid.UUID(team_id),
+            user_id=user_id,
+            event_type=event_type,
+            event_data=event_data or {},
+            related_reminder_id=uuid.UUID(related_reminder_id) if related_reminder_id else None,
+        )
+        with SessionLocal() as session:
+            session.add(event)
+            session.commit()
+            session.refresh(event)
+            return {
+                "id": str(event.id),
+                "team_id": str(event.team_id),
+                "user_id": event.user_id,
+                "event_type": event.event_type,
+                "event_data": event.event_data,
+                "related_reminder_id": str(event.related_reminder_id)
+                if event.related_reminder_id
+                else None,
+                "created_at": event.created_at.isoformat() if event.created_at else None,
+            }
     except Exception as e:
         logger.error(f"[CONTEXT] Failed to log event: {e}")
         # Non-critical — don't raise, just log
-        return record
+        return {
+            "team_id": team_id,
+            "user_id": user_id,
+            "event_type": event_type,
+            "event_data": event_data or {},
+            "related_reminder_id": related_reminder_id,
+            "created_at": now.isoformat(),
+        }
 
 
 async def get_user_context(
@@ -69,21 +88,34 @@ async def get_user_context(
     }
 
     try:
-        # Recent events
-        events_res = (
-            supabase.table("context_history")
-            .select("*")
-            .eq("team_id", team_id)
-            .eq("user_id", user_id)
-            .order("created_at", desc=True)
-            .limit(limit)
-            .execute()
-        )
-        context["recent_events"] = events_res.data or []
+        with SessionLocal() as session:
+            stmt = (
+                select(ContextHistory)
+                .where(
+                    ContextHistory.team_id == uuid.UUID(team_id),
+                    ContextHistory.user_id == user_id,
+                )
+                .order_by(ContextHistory.created_at.desc())
+                .limit(limit)
+            )
+            events = session.scalars(stmt).all()
+            context["recent_events"] = [
+                {
+                    "id": str(e.id),
+                    "team_id": str(e.team_id),
+                    "user_id": e.user_id,
+                    "event_type": e.event_type,
+                    "event_data": e.event_data,
+                    "related_reminder_id": str(e.related_reminder_id)
+                    if e.related_reminder_id
+                    else None,
+                    "created_at": e.created_at.isoformat() if e.created_at else None,
+                }
+                for e in events
+            ]
 
         # Stats
-        stats = await get_user_stats(team_id, user_id)
-        context["stats"] = stats
+        context["stats"] = await get_user_stats(team_id, user_id)
 
     except Exception as e:
         logger.error(f"[CONTEXT] Failed to get user context: {e}")
@@ -103,32 +135,26 @@ async def get_user_stats(team_id: str, user_id: str) -> dict:
     }
 
     try:
-        # Count all reminders for this user
-        all_res = (
-            supabase.table("reminders")
-            .select("status", count="exact")
-            .eq("team_id", team_id)
-            .eq("target_user_id", user_id)
-            .execute()
-        )
-        stats["total_reminders"] = all_res.count or 0
-
-        if all_res.data:
-            for r in all_res.data:
-                st = r.get("status")
-                if st == "completed":
-                    stats["completed"] += 1
-                elif st == "pending":
-                    stats["pending"] += 1
-                elif st == "snoozed":
-                    stats["snoozed"] += 1
-                elif st == "cancelled":
-                    stats["cancelled"] += 1
-
-            if stats["total_reminders"] > 0:
-                stats["completion_rate"] = round(
-                    stats["completed"] / stats["total_reminders"] * 100, 1
+        with SessionLocal() as session:
+            stmt = (
+                select(Reminder.status, func.count())
+                .where(
+                    Reminder.team_id == uuid.UUID(team_id),
+                    Reminder.target_user_id == user_id,
                 )
+                .group_by(Reminder.status)
+            )
+            rows = session.execute(stmt).all()
+
+        for status_value, count in rows:
+            stats["total_reminders"] += count
+            if status_value in stats:
+                stats[status_value] += count
+
+        if stats["total_reminders"] > 0:
+            stats["completion_rate"] = round(
+                stats["completed"] / stats["total_reminders"] * 100, 1
+            )
 
     except Exception as e:
         logger.error(f"[CONTEXT] Failed to get user stats: {e}")
@@ -146,23 +172,43 @@ async def find_related_tasks(
     related = []
 
     try:
-        query = (
-            supabase.table("reminders")
-            .select("id, task_text, project, priority, remind_at, status")
-            .eq("team_id", team_id)
-            .eq("status", "pending")
-        )
+        with SessionLocal() as session:
+            filters = [
+                Reminder.team_id == uuid.UUID(team_id),
+                Reminder.status == "pending",
+            ]
+            if project:
+                filters.append(Reminder.project == project)
+            elif target_user_id:
+                filters.append(Reminder.target_user_id == target_user_id)
+            else:
+                return []
 
-        if project:
-            query = query.eq("project", project)
-        elif target_user_id:
-            query = query.eq("target_user_id", target_user_id)
-        else:
-            return []
-
-        query = query.order("remind_at", desc=False).limit(limit)
-        res = query.execute()
-        related = res.data or []
+            stmt = (
+                select(
+                    Reminder.id,
+                    Reminder.task_text,
+                    Reminder.project,
+                    Reminder.priority,
+                    Reminder.remind_at,
+                    Reminder.status,
+                )
+                .where(*filters)
+                .order_by(Reminder.remind_at.asc())
+                .limit(limit)
+            )
+            rows = session.execute(stmt).all()
+            related = [
+                {
+                    "id": str(row.id),
+                    "task_text": row.task_text,
+                    "project": row.project,
+                    "priority": row.priority,
+                    "remind_at": row.remind_at.isoformat() if row.remind_at else None,
+                    "status": row.status,
+                }
+                for row in rows
+            ]
 
     except Exception as e:
         logger.error(f"[CONTEXT] Failed to find related tasks: {e}")
